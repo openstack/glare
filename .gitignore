@@ -36,6 +36,7 @@ pip-delete-this-directory.txt
 
 # Unit test / coverage reports
 htmlcov/
+.testrepository/
 .tox/
 .coverage
 .coverage.*
@@ -90,3 +91,8 @@ ENV/
 
 # IDE files
 .idea
+
+# Files created by doc build
+AUTHORS
+ChangeLog
+doc/source/api
