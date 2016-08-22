@@ -1134,7 +1134,6 @@ class BaseArtifact(base.VersionedObject):
             schema['required_on_activate'] = False
         if attr._default is not None:
             schema['default'] = attr._default
-
         schema['filter_ops'] = attr.filter_ops
 
         return schema
