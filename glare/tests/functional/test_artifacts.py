@@ -762,7 +762,8 @@ class TestArtifact(functional.FunctionalTest):
         # Set custom location
         url = '/sample_artifact/%s' % art['id']
         body = jsonutils.dumps(
-            {'url': 'https://www.apache.org/licenses/LICENSE-2.0.txt'})
+            {'url': 'https://www.apache.org/licenses/LICENSE-2.0.txt',
+             'checksum': "fake", 'size': 3967, 'content_type': 'text/plain'})
         headers = {'Content-Type':
                    'application/vnd+openstack.glare-custom-location+json'}
         self.put(url=url + '/blob', data=body,
@@ -780,7 +781,8 @@ class TestArtifact(functional.FunctionalTest):
         self.assertIsNotNone(art['blob']['checksum'])
         self.assertEqual(3967, art['blob']['size'])
         self.assertEqual('text/plain', art['blob']['content_type'])
-        self.assertNotIn('url', art['blob'])
+        self.assertEqual('https://www.apache.org/licenses/LICENSE-2.0.txt',
+                         art['blob']['url'])
         self.assertNotIn('id', art['blob'])
 
         # Set custom location
@@ -795,7 +797,8 @@ class TestArtifact(functional.FunctionalTest):
         self.assertEqual(3967, art['dict_of_blobs']['blob']['size'])
         self.assertEqual('text/plain',
                          art['dict_of_blobs']['blob']['content_type'])
-        self.assertNotIn('url', art['dict_of_blobs']['blob'])
+        self.assertEqual('https://www.apache.org/licenses/LICENSE-2.0.txt',
+                         art['dict_of_blobs']['blob']['url'])
         self.assertNotIn('id', art['dict_of_blobs']['blob'])
         # test re-add failed
         self.put(url=url + '/dict_of_blobs/blob', data=body, status=409,
@@ -1424,7 +1427,7 @@ class TestArtifact(functional.FunctionalTest):
         self.assertEqual('active', art['blob']['status'])
         self.assertEqual('application/octet-stream',
                          art['blob']['content_type'])
-        self.assertNotIn('url', art['blob'])
+        self.assertIn('url', art['blob'])
         self.assertNotIn('id', art['blob'])
 
         # reUpload file to artifact
