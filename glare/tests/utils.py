@@ -67,12 +67,6 @@ class BaseTestCase(testtools.TestCase):
         self.test_dir = self.useFixture(fixtures.TempDir()).path
         self.conf_dir = os.path.join(self.test_dir, 'etc')
         utils.safe_mkdirs(self.conf_dir)
-        self.set_policy()
-
-    def set_policy(self):
-        conf_file = "policy.json"
-        self.policy_file = self._copy_data_file(conf_file, self.conf_dir)
-        self.config(policy_file=self.policy_file, group='oslo_policy')
 
     def _copy_data_file(self, file_name, dst_dir):
         src_file_name = os.path.join('glare/tests/etc', file_name)
