@@ -35,7 +35,6 @@ import tempfile
 import time
 
 import fixtures
-from oslo_serialization import jsonutils
 # NOTE(jokke): simplified transition to py3, behaves like py2 xrange
 from six.moves import range
 import six.moves.urllib.parse as urlparse
@@ -266,7 +265,7 @@ class GlareServer(Server):
     Server object that starts/stops/manages Glare server
     """
 
-    def __init__(self, test_dir, port, policy_file, delayed_delete=False,
+    def __init__(self, test_dir, port, delayed_delete=False,
                  pid_file=None, sock=None, **kwargs):
         super(GlareServer, self).__init__(test_dir, port, sock=sock)
         self.server_name = 'api'
@@ -274,27 +273,18 @@ class GlareServer(Server):
         self.default_store = kwargs.get("default_store", "file")
         self.key_file = ""
         self.cert_file = ""
-        self.metadata_encryption_key = "012345678901234567890123456789ab"
-        self.image_dir = os.path.join(self.test_dir, "images")
+        self.image_dir = os.path.join(self.test_dir, "artifacts")
         self.pid_file = pid_file or os.path.join(self.test_dir, "glare.pid")
         self.log_file = os.path.join(self.test_dir, "glare.log")
-        self.image_size_cap = 1099511627776
         self.delayed_delete = delayed_delete
-        self.owner_is_tenant = True
         self.workers = 0
-        self.policy_file = policy_file
-        self.policy_default_rule = 'default'
         self.disable_path = None
 
         self.needs_database = True
         default_sql_connection = 'sqlite:////%s/tests.sqlite' % self.test_dir
         self.sql_connection = os.environ.get('GLARE_TEST_SQL_CONNECTION',
                                              default_sql_connection)
-        self.user_storage_quota = '0'
         self.lock_path = self.test_dir
-
-        self.location_strategy = 'location_order'
-        self.store_type_location_strategy_preference = ""
 
         self.send_identity_headers = False
         self.enabled_artifact_types = ''
@@ -307,19 +297,13 @@ bind_host = 127.0.0.1
 bind_port = %(bind_port)s
 key_file = %(key_file)s
 cert_file = %(cert_file)s
-metadata_encryption_key = %(metadata_encryption_key)s
 log_file = %(log_file)s
 delayed_delete = %(delayed_delete)s
 workers = %(workers)s
 sql_connection = %(sql_connection)s
 lock_path = %(lock_path)s
-[oslo_policy]
-policy_file = %(policy_file)s
-policy_default_rule = %(policy_default_rule)s
 [paste_deploy]
 flavor = %(deployment_flavor)s
-[store_type_location_strategy]
-store_type_preference = %(store_type_location_strategy_preference)s
 [glance_store]
 filesystem_store_datadir=%(image_dir)s
 default_store = %(default_store)s
@@ -383,12 +367,9 @@ class FunctionalTest(test_utils.BaseTestCase):
 
         conf_dir = os.path.join(self.test_dir, 'etc')
         utils.safe_mkdirs(conf_dir)
-        self.copy_data_file('policy.json', conf_dir)
-        self.policy_file = os.path.join(conf_dir, 'policy.json')
 
         self.glare_server = GlareServer(self.test_dir,
                                         self.glare_port,
-                                        self.policy_file,
                                         sock=glare_sock)
 
         self.pid_files = [self.glare_server.pid_file]
@@ -405,11 +386,6 @@ class FunctionalTest(test_utils.BaseTestCase):
         super(FunctionalTest, self).tearDown()
 
         self.glare_server.dump_log('glare_server')
-
-    def set_policy_rules(self, rules):
-        fap = open(self.policy_file, 'w')
-        fap.write(jsonutils.dumps(rules))
-        fap.close()
 
     def _reset_database(self, conn_string):
         conn_pieces = urlparse.urlparse(conn_string)
