@@ -22,6 +22,7 @@ from oslo_db.sqlalchemy import session
 from oslo_log import log as os_logging
 from oslo_utils import timeutils
 import osprofiler.sqlalchemy
+from retrying import retry
 import six
 import sqlalchemy
 from sqlalchemy import and_
@@ -102,6 +103,8 @@ def update(context, artifact_id, values, session):
     return _create_or_update(context, artifact_id, values, session)
 
 
+@retry(retry_on_exception=_retry_on_deadlock, wait_fixed=500,
+       stop_max_attempt_number=50)
 def delete(context, artifact_id, session):
     artifact = _get(context, artifact_id, session)
     artifact.properties = []
@@ -120,6 +123,8 @@ def _drop_protected_attrs(model_class, values):
             del values[attr]
 
 
+@retry(retry_on_exception=_retry_on_deadlock, wait_fixed=500,
+       stop_max_attempt_number=50)
 def _create_or_update(context, artifact_id, values, session):
     with session.begin():
         _drop_protected_attrs(models.Artifact, values)
