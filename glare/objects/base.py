@@ -32,10 +32,10 @@ from glare.common import utils
 from glare.db import artifact_api
 from glare import locking
 from glare.i18n import _, _LI
-from glare.objects import attribute
-from glare.objects import fields as glare_fields
-from glare.objects.fields import BlobFieldType as BlobStatus
-from glare.objects import validators
+from glare.objects.meta import attribute
+from glare.objects.meta import fields as glare_fields
+from glare.objects.meta.fields import BlobFieldType as BlobStatus
+from glare.objects.meta import validators
 
 artifact_opts = [
     cfg.BoolOpt('delayed_blob_delete', default=False,

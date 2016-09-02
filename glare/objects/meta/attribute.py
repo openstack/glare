@@ -17,8 +17,8 @@ import six
 from oslo_versionedobjects import fields
 
 from glare.common import exception as exc
-from glare.objects import fields as glare_fields
-from glare.objects import validators as val_lib
+from glare.objects.meta import fields as glare_fields
+from glare.objects.meta import validators as val_lib
 
 FILTERS = (
     FILTER_EQ, FILTER_NEQ, FILTER_IN, FILTER_GT, FILTER_GTE, FILTER_LT,
