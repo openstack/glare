@@ -33,7 +33,8 @@ LOG = logging.getLogger(__name__)
 
 registry_options = [
     cfg.ListOpt('enabled_artifact_types',
-                default=[],
+                default=['images', 'tosca_templates', 'heat_templates',
+                         'murano_packages', 'heat_environments'],
                 item_type=types.String(),
                 help=_("List of enabled artifact types that will be "
                        "available to user")),
