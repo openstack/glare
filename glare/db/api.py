@@ -58,7 +58,7 @@ class BaseDBAPI(object):
         """
         raise NotImplementedError()
 
-    def list(self, context, filters, marker, limit, sort):
+    def list(self, context, filters, marker, limit, sort, latest):
         """List artifacts from db
 
         :param context: user request context

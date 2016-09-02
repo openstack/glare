@@ -238,7 +238,7 @@ class Engine(object):
 
     @classmethod
     def list(cls, context, type_name, filters, marker=None, limit=None,
-             sort=None):
+             sort=None, latest=False):
         """Return list of artifacts requested by user
 
         :param filters: list of requested filters
@@ -249,7 +249,7 @@ class Engine(object):
         # return list to the user
         af_list = [af.to_dict()
                    for af in artifact_type.list(context, filters, marker,
-                                                limit, sort)]
+                                                limit, sort, latest)]
         return af_list
 
     @classmethod

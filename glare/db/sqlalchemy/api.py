@@ -25,6 +25,7 @@ import osprofiler.sqlalchemy
 import six
 import sqlalchemy
 from sqlalchemy import and_
+from sqlalchemy import func
 from sqlalchemy import or_
 import sqlalchemy.orm as orm
 from sqlalchemy.orm import aliased
@@ -179,7 +180,7 @@ def get(context, artifact_id, session):
 
 
 def get_all(context, session, filters=None, marker=None, limit=None,
-            sort=None):
+            sort=None, latest=False):
     """List all visible artifacts
     :param filters: dict of filter keys and values.
     :param marker: artifact id after which to start page
@@ -189,16 +190,17 @@ def get_all(context, session, filters=None, marker=None, limit=None,
     and type is type of the attribute: 'bool', 'string', 'numeric' or 'int' or
     None if attribute is base.
     """
-    artifacts = _get_all(context, session, filters, marker, limit, sort)
+    artifacts = _get_all(context, session, filters, marker, limit, sort, latest)
     return [af.to_dict() for af in artifacts]
 
 
 def _get_all(context, session, filters=None, marker=None, limit=None,
-             sort=None):
+             sort=None, latest=False):
 
     filters = filters or {}
 
-    query = _do_artifacts_query(context, session)
+    query = _do_artifacts_query(context, session, latest)
+
     basic_conds, tag_conds, prop_conds = _do_query_filters(filters)
 
     if basic_conds:
@@ -318,13 +320,21 @@ def _do_paginate_query(query, marker=None, limit=None, sort=None):
     return query
 
 
-def _do_artifacts_query(context, session):
+def _do_artifacts_query(context, session, latest=False):
     """Build the query to get all artifacts based on the context"""
-    query = (
-        session.query(models.Artifact).
-        options(joinedload(models.Artifact.properties)).
-        options(joinedload(models.Artifact.tags)).
-        options(joinedload(models.Artifact.blobs)))
+
+    query = session.query(models.Artifact)
+
+    if latest:
+        latest_subq = session.query(models.Artifact, func.max(
+            models.Artifact.version_prefix,
+            models.Artifact.version_suffix)).group_by(
+            models.Artifact.name).subquery()
+        query = query.filter(models.Artifact.id == latest_subq.c.id)
+
+    query = (query.options(joinedload(models.Artifact.properties)).
+             options(joinedload(models.Artifact.tags)).
+             options(joinedload(models.Artifact.blobs)))
 
     # If admin, return everything.
     if context.is_admin:
