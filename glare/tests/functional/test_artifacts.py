@@ -75,7 +75,8 @@ class TestArtifact(functional.FunctionalTest):
         self.set_user('user1')
         self.glare_server.deployment_flavor = 'noauth'
         self.glare_server.enabled_artifact_types = (
-            'sample_artifact, heat_templates, heat_environments')
+            'sample_artifact, heat_templates, heat_environments, '
+            'murano_packages')
         self.glare_server.custom_artifact_types_modules = (
             'glare.tests.functional.sample_artifact')
         self.start_servers(**self.__dict__.copy())
