@@ -1497,6 +1497,21 @@ class TestArtifact(functional.FunctionalTest):
         patch = [{"op": "replace", "path": "/str1", "value": 'd' * 256}]
         self.patch(url=url, data=patch, status=400)
 
+        # 'cc' is not allowed value for the string
+        patch = [{"op": "replace", "path": "/string_validators",
+                  "value": 'cc'}]
+        self.patch(url=url, data=patch, status=400)
+
+        # 'aa' is okay
+        patch = [{"op": "replace", "path": "/string_validators",
+                  "value": 'aa'}]
+        self.patch(url=url, data=patch)
+
+        # 'bb' is okay too
+        patch = [{"op": "replace", "path": "/string_validators",
+                  "value": 'bb'}]
+        self.patch(url=url, data=patch)
+
         # test list has 3 elements maximum
         patch = [{"op": "add", "path": "/list_validators/-", "value": 'd'}]
         self.patch(url=url, data=patch, status=400)
@@ -2241,6 +2256,9 @@ class TestArtifact(functional.FunctionalTest):
                         u'type': [u'string',
                                   u'null']},
                     u'string_validators': {
+                        u'enum': [u'aa',
+                                  u'bb',
+                                  None],
                         u'filter_ops': [u'eq',
                                         u'neq',
                                         u'in',
