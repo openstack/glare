@@ -1,0 +1,9 @@
+Code-Review+2: Kairat Kushaev <kkushaev@mirantis.com>
+Code-Review+2: Darja Shakhray <dshakhray@mirantis.com>
+Workflow+1: Darja Shakhray <dshakhray@mirantis.com>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Thu, 08 Sep 2016 12:05:25 +0000
+Reviewed-on: https://review.openstack.org/366864
+Project: openstack/glare
+Branch: refs/heads/master
