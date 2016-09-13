@@ -1,4 +1,4 @@
-# Copyright 2016 OpenStack Foundation
+# Copyright 2012 OpenStack Foundation.
 # All Rights Reserved.
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -13,15 +13,13 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-import oslo_i18n as i18n
+import errno
+import os
 
 
-def fake_translate_msgid(msgid, domain, desired_locale=None):
-    return msgid
-
-i18n.enable_lazy()
-
-# To ensure messages don't really get translated while running tests.
-# As there are lots of places where matching is expected when comparing
-# exception message(translated) with raw message.
-i18n._translate_msgid = fake_translate_msgid
+def safe_mkdirs(path):
+    try:
+        os.makedirs(path)
+    except OSError as e:
+        if e.errno != errno.EEXIST:
+            raise
