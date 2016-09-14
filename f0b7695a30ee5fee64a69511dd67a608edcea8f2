@@ -1,0 +1,9 @@
+Code-Review+2: Kairat Kushaev <kkushaev@mirantis.com>
+Code-Review+2: Sergey Skripnick <sskripnick@mirantis.com>
+Workflow+1: Sergey Skripnick <sskripnick@mirantis.com>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Wed, 14 Sep 2016 16:33:29 +0000
+Reviewed-on: https://review.openstack.org/368931
+Project: openstack/glare
+Branch: refs/heads/master
