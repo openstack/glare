@@ -14,11 +14,13 @@
 #    under the License.
 
 import inspect
-import six
 
 from oslo_log import log as logging
+from retrying import retry
+import six
 
-from glare.i18n import _LI
+from glare.common import exception
+from glare.i18n import _LI, _LW
 
 LOG = logging.getLogger(__name__)
 
@@ -66,6 +68,15 @@ class Lock(object):
         self.release(self)
 
 
+def _retry_func(exc):
+    """Decorator to retry a Lock acquire call."""
+
+    if isinstance(exc, exception.Conflict):
+        LOG.warn(_LW("Couldn't acquire lock. Retrying..."))
+        return True
+    return False
+
+
 class LockEngine(object):
     """Glare lock engine.
     Defines how artifact updates must be synchronized with each other. When
@@ -88,6 +99,8 @@ class LockEngine(object):
         """
         self.lock_api = lock_api
 
+    @retry(retry_on_exception=_retry_func, wait_fixed=500,
+           stop_max_attempt_number=10)
     def acquire(self, context, lock_key):
         """Acquire lock to update whole artifact
 
