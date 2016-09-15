@@ -13,6 +13,7 @@
 # under the License.
 
 import operator
+import time
 import threading
 import uuid
 
@@ -53,6 +54,8 @@ DEFAULT_SORT_PARAMETERS = (('created_at', 'desc', None), ('id', 'asc', None))
 _FACADE = None
 _LOCK = threading.Lock()
 
+DB_SPINLOCK_RETRY = 10
+DB_SPINLOCK_SLEEP = 0.01
 
 def _retry_on_deadlock(exc):
     """Decorator to retry a DB API call if Deadlock was received."""
@@ -577,24 +580,25 @@ def _do_blobs(artifact, new_blobs):
     return blobs_to_update
 
 
-@retry(retry_on_exception=_retry_on_deadlock, wait_fixed=500,
-       stop_max_attempt_number=50)
 def create_lock(context, lock_key, session):
-    try:
-        session.query(models.ArtifactLock).filter_by(id=lock_key).one()
-    except orm.exc.NoResultFound:
-        lock = models.ArtifactLock()
-        lock.id = lock_key
-        lock.save(session=session)
-        return lock.id
+    """This is a kind of spinlock.
+
+    Try to create a record until success.
+    """
+
+    for i in range(DB_SPINLOCK_RETRY):
+        try:
+            lock = models.ArtifactLock()
+            lock.id = lock_key
+            return lock.save(session=session)
+        except:
+            time.sleep(DB_SPINLOCK_SLEEP)
 
     msg = _("Cannot lock an item with key %s. "
             "Lock already acquired by other request") % lock_key
     raise exception.Conflict(msg)
 
 
-@retry(retry_on_exception=_retry_on_deadlock, wait_fixed=500,
-       stop_max_attempt_number=50)
 def delete_lock(context, lock_id, session):
     try:
         session.query(models.ArtifactLock).filter_by(id=lock_id).delete()

@@ -237,7 +237,7 @@ class ArtifactLock(BASE, ArtifactBase):
     __tablename__ = 'glare_artifact_locks'
     __table_args__ = (
         {'mysql_engine': 'InnoDB', 'mysql_charset': 'utf8'},)
-    id = Column(String(255), primary_key=True, nullable=False)
+    id = Column(String(255), primary_key=True, unique=True, nullable=False)
 
 
 def register_models(engine):
