@@ -417,7 +417,7 @@ class TestArtifact(functional.FunctionalTest):
         result = self.get(url=marker[10:])
         self.assertEqual([art_list[0]], result['sample_artifact'])
 
-    def test_artifact_filters(self):
+    def test_artifact_base_filters(self):
         # Create artifact
         art_list = [self.create_artifact({'name': 'name%s' % i,
                                           'version': '1.0',
@@ -619,6 +619,58 @@ class TestArtifact(functional.FunctionalTest):
         result = sort_results(self.get(url=url)['sample_artifact'])
         self.assertEqual(art_list[5:], result)
 
+    def test_artifact_list_dict_filters(self):
+        lists_of_str = [
+            ['aaa', 'bbb', 'ccc'],
+            ['aaa', 'bbb'],
+            ['aaa', 'ddd'],
+            ['bbb'],
+            ['ccc']
+        ]
+        dicts_of_str = [
+            {'aaa': 'z', 'bbb': 'z', 'ccc': 'z'},
+            {'aaa': 'z', 'bbb': 'z'},
+            {'aaa': 'z', 'ddd': 'z'},
+            {'bbb': 'z'},
+            {'ccc': 'z'}
+        ]
+        art_list = [self.create_artifact({'name': 'name%s' % i,
+                                          'version': '1.0',
+                                          'tags': ['tag%s' % i],
+                                          'int1': 1024,
+                                          'float1': 123.456,
+                                          'str1': 'bugaga',
+                                          'bool1': True,
+                                          'list_of_str': lists_of_str[i],
+                                          'dict_of_str': dicts_of_str[i]})
+                    for i in range(5)]
+
+        # test list filters
+        url = '/sample_artifact?list_of_str=aaa&sort=name'
+        result = sort_results(self.get(url=url)['sample_artifact'])
+        self.assertEqual(art_list[:3], result)
+
+        url = '/sample_artifact?list_of_str=ccc&sort=name'
+        result = sort_results(self.get(url=url)['sample_artifact'])
+        self.assertEqual([art_list[0], art_list[4]], result)
+
+        url = '/sample_artifact?list_of_str=eee&sort=name'
+        result = sort_results(self.get(url=url)['sample_artifact'])
+        self.assertEqual([], result)
+
+        # test dict filters
+        url = '/sample_artifact?dict_of_str=aaa&sort=name'
+        result = sort_results(self.get(url=url)['sample_artifact'])
+        self.assertEqual(art_list[:3], result)
+
+        url = '/sample_artifact?dict_of_str=ccc&sort=name'
+        result = sort_results(self.get(url=url)['sample_artifact'])
+        self.assertEqual([art_list[0], art_list[4]], result)
+
+        url = '/sample_artifact?dict_of_str=eee&sort=name'
+        result = sort_results(self.get(url=url)['sample_artifact'])
+        self.assertEqual([], result)
+
     def test_artifact_dict_prop_filters(self):
         # Create artifact
         art_list = [self.create_artifact({'name': 'name0',
@@ -679,9 +731,12 @@ class TestArtifact(functional.FunctionalTest):
         self.assertEqual([], result)
 
         url = '/sample_artifact?dict_of_str'
-        self.get(url=url, status=400)
+        self.assertEqual([], result)
 
         url = '/sample_artifact?dict_of_str.pr3=blabla:val3'
+        self.get(url=url, status=400)
+
+        url = '/sample_artifact?list_of_str.pr3=blabla:val3'
         self.get(url=url, status=400)
 
         url = '/sample_artifact?dict_of_str.bla=val1'
