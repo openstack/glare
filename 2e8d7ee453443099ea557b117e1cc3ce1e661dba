@@ -1,0 +1,10 @@
+Code-Review+2: Mike Fedosin <mfedosin@mirantis.com>
+Code-Review+2: Kairat Kushaev <kkushaev@mirantis.com>
+Workflow+1: Kairat Kushaev <kkushaev@mirantis.com>
+Code-Review+1: ShangXiao <shangxiaobj@inspur.com>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Wed, 21 Sep 2016 06:39:36 +0000
+Reviewed-on: https://review.openstack.org/373301
+Project: openstack/glare
+Branch: refs/heads/master
