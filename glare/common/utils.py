@@ -29,6 +29,7 @@ except ImportError:
 from eventlet.green import socket
 
 import functools
+import hashlib
 import os
 import re
 import uuid
@@ -213,6 +214,8 @@ class LimitingReader(object):
         self.data = data
         self.limit = limit
         self.bytes_read = 0
+        self.sha1 = hashlib.sha1()
+        self.sha256 = hashlib.sha256()
 
     def __iter__(self):
         for chunk in self.data:
@@ -225,6 +228,9 @@ class LimitingReader(object):
     def read(self, i):
         result = self.data.read(i)
         self.bytes_read += len(result)
+        if self.bytes_read:
+            self.sha1.update(result)
+            self.sha256.update(result)
         if self.bytes_read > self.limit:
             raise exception.RequestEntityTooLarge()
         return result
