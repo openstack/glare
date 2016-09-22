@@ -109,6 +109,10 @@ class BaseArtifact(base.VersionedObject):
                               required_on_activate=False, sortable=True,
                               description="Datetime when artifact has became "
                                           "active."),
+        'display_name': Field(fields.StringField, mutable=True,
+                              required_on_activate=False,
+                              description="Artifact name in human-readable "
+                                          "format."),
         'description': Field(fields.StringField, mutable=True,
                              required_on_activate=False, default="",
                              validators=[validators.MaxStrLen(4096)],

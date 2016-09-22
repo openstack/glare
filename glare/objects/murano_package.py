@@ -38,9 +38,6 @@ class MuranoPackage(base.BaseArtifact):
                           ['Application', 'Library'])],
                       default='Application',
                       description="Package type."),
-        'display_name': Field(fields.StringField, mutable=True,
-                              description="Package name in human-readable "
-                                          "format."),
         'categories': List(fields.String, mutable=True,
                            description="List of categories specified "
                                        "for the package."),
