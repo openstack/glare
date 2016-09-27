@@ -1,0 +1,8 @@
+Code-Review+2: Mike Fedosin <mfedosin@mirantis.com>
+Workflow+1: Mike Fedosin <mfedosin@mirantis.com>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Tue, 27 Sep 2016 10:32:45 +0000
+Reviewed-on: https://review.openstack.org/377438
+Project: openstack/glare
+Branch: refs/heads/master
