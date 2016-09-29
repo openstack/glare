@@ -1088,7 +1088,7 @@ class BaseArtifact(base.VersionedObject):
         return res
 
     @staticmethod
-    def schema_type(attr):
+    def _get_schema_type(attr):
         if isinstance(attr, fields.IntegerField):
             return 'integer'
         elif isinstance(attr, fields.FloatField):
@@ -1102,8 +1102,42 @@ class BaseArtifact(base.VersionedObject):
         return 'string'
 
     @classmethod
+    def _get_glare_type(cls, attr):
+        if isinstance(attr, fields.IntegerField):
+            return 'Integer'
+        elif isinstance(attr, fields.FloatField):
+            return 'Float'
+        elif isinstance(attr, fields.FlexibleBooleanField):
+            return 'Boolean'
+        elif isinstance(attr, fields.DateTimeField):
+            return 'DateTime'
+        elif isinstance(attr, glare_fields.BlobField):
+            return 'Blob'
+        elif isinstance(attr, glare_fields.Dependency):
+            return 'Dependency'
+        elif isinstance(attr, glare_fields.List):
+            return cls._get_element_type(attr.element_type) + 'List'
+        elif isinstance(attr, glare_fields.Dict):
+            return cls._get_element_type(attr.element_type) + 'Dict'
+        return 'String'
+
+    @staticmethod
+    def _get_element_type(element_type):
+        if element_type is fields.FlexibleBooleanField:
+            return 'Boolean'
+        elif element_type is fields.Integer:
+            return 'Integer'
+        elif element_type is fields.Float:
+            return 'Float'
+        elif element_type is glare_fields.BlobFieldType:
+            return 'Blob'
+        elif element_type is glare_fields.Dependency:
+            return 'Dependency'
+        return 'String'
+
+    @classmethod
     def schema_attr(cls, attr, attr_name=''):
-        attr_type = cls.schema_type(attr)
+        attr_type = cls._get_schema_type(attr)
         schema = {}
 
         # generate schema for validators
@@ -1112,6 +1146,7 @@ class BaseArtifact(base.VersionedObject):
 
         schema['type'] = (attr_type
                           if not attr.nullable else [attr_type, 'null'])
+        schema['glareType'] = cls._get_glare_type(attr)
         output_blob_schema = {
             'type': ['object', 'null'],
             'properties': {
@@ -1134,7 +1169,7 @@ class BaseArtifact(base.VersionedObject):
             schema['readOnly'] = True
 
         if isinstance(attr, glare_fields.Dict):
-            element_type = (cls.schema_type(attr.element_type)
+            element_type = (cls._get_schema_type(attr.element_type)
                             if hasattr(attr, 'element_type')
                             else 'string')
 
@@ -1156,7 +1191,7 @@ class BaseArtifact(base.VersionedObject):
 
         if attr_type == 'array':
             schema['items'] = {
-                'type': (cls.schema_type(attr.element_type)
+                'type': (cls._get_schema_type(attr.element_type)
                          if hasattr(attr, 'element_type')
                          else 'string')}
 
