@@ -31,6 +31,10 @@ def get_transport():
     return oslo_messaging.get_notification_transport(CONF)
 
 
+def set_defaults(control_exchange='glare'):
+    oslo_messaging.set_transport_defaults(control_exchange)
+
+
 class RequestSerializer(serializer.Serializer):
 
     def serialize_entity(self, context, entity):
@@ -74,7 +78,7 @@ class Notifier(object):
         """
         af_notifier = cls._get_notifier()
         method = getattr(af_notifier, level.lower())
-        method(context, "%s.%s" % (cls.SERVICE_NAME, event_type), body)
+        method({}, "%s.%s" % (cls.SERVICE_NAME, event_type), body)
         LOG.debug('Notification event %(event)s send successfully for '
                   'request %(request)s', {'event': event_type,
                                           'request': context.request_id})
