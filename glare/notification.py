@@ -31,6 +31,10 @@ def get_transport():
     return oslo_messaging.get_notification_transport(CONF)
 
 
+def set_defaults(control_exchange='glare'):
+    oslo_messaging.set_transport_defaults(control_exchange)
+
+
 class RequestSerializer(serializer.Serializer):
 
     def serialize_entity(self, context, entity):
