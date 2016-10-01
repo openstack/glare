@@ -106,7 +106,10 @@ class ArtifactRegistry(vo_base.VersionedObjectRegistry):
         for type_name in CONF.glare.enabled_artifact_types:
             for af_type in supported_types:
                 if type_name == af_type.get_type_name():
-                    cls._validate_artifact_type(af_type)
+                    # all is read_only type, so we have to allow to redefine
+                    # methods their
+                    if type_name != 'all':
+                        cls._validate_artifact_type(af_type)
                     cls.register(af_type)
                     break
             else:
