@@ -625,6 +625,11 @@ class BaseArtifact(base.VersionedObject):
                                 'for artifact %(id)s') % {'name': name,
                                                           'id': af.id}
                         raise exception.Conflict(msg)
+                    elif b['status'] == glare_fields.\
+                            BlobFieldType.SAVING:
+                        msg = _('Blob %(name)s is saving for artifact %(id)s'
+                                ) % {'name': name, 'id': af.id}
+                        raise exception.Conflict(msg)
                     else:
                         b['status'] = glare_fields.BlobFieldType.PENDING_DELETE
                         blobs[name] = b
@@ -637,6 +642,11 @@ class BaseArtifact(base.VersionedObject):
                             msg = _('Blob %(name)s is already deleting '
                                     'for artifact %(id)s') % {'name': name,
                                                               'id': af.id}
+                            raise exception.Conflict(msg)
+                        elif b['status'] == glare_fields. \
+                                BlobFieldType.SAVING:
+                            msg = _('Blob %(name)s is saving for artifact '
+                                    '%(id)s') % {'name': name, 'id': af.id}
                             raise exception.Conflict(msg)
                         else:
                             b['status'] = glare_fields.\
@@ -823,8 +833,10 @@ class BaseArtifact(base.VersionedObject):
                 'sha256': None, 'status': glare_fields.BlobFieldType.SAVING,
                 'external': False, 'content_type': content_type}
         setattr(af, field_name, blob)
-        cls.db_api.update(
-            context, af.id, {field_name: getattr(af, field_name)})
+        with cls.lock_engine.acquire(context, ":".join(
+                (cls.get_type_name(), af.id))):
+            cls.db_api.update(
+                context, af.id, {field_name: getattr(af, field_name)})
         blob_id = getattr(af, field_name)['id']
 
         try:
@@ -902,8 +914,10 @@ class BaseArtifact(base.VersionedObject):
                 'external': False, 'content_type': content_type}
         blob_dict_attr = getattr(af, field_name)
         blob_dict_attr[blob_key] = blob
-        cls.db_api.update(
-            context, af.id, {field_name: blob_dict_attr})
+        with cls.lock_engine.acquire(context, ":".join(
+                (cls.get_type_name(), af.id))):
+            cls.db_api.update(
+                context, af.id, {field_name: blob_dict_attr})
         blob_id = getattr(af, field_name)[blob_key]['id']
         try:
             location_uri, size, checksums = store_api.save_blob_to_store(

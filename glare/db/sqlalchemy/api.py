@@ -145,6 +145,11 @@ def _create_or_update(context, artifact_id, values, session):
             # update the existing artifact
             artifact = _get(context, artifact_id, session)
 
+        if 'status' in values and values['status'] == 'active' and\
+                _has_uploading_blobs(artifact_id, session):
+            raise exception.Conflict("You cannot activate artifact if it has "
+                                     "uploading blobs.")
+
         if 'version' in values:
             values['version'] = semver_db.parse(values['version'])
 
@@ -592,6 +597,13 @@ def _do_blobs(artifact, new_blobs):
                     blobs_to_update.append(blob)
 
     return blobs_to_update
+
+
+def _has_uploading_blobs(artifact_id, session):
+    res = session.query(models.ArtifactBlob).filter(
+        models.ArtifactBlob.status == 'saving').filter(
+        models.ArtifactBlob.artifact_id == artifact_id).all()
+    return len(res) > 0
 
 
 @retry(retry_on_exception=_retry_on_deadlock, wait_fixed=500,

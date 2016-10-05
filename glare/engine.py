@@ -264,7 +264,6 @@ class Engine(object):
         return modified_af.to_dict()
 
     @classmethod
-    @lock_engine.locked(['type_name', 'artifact_id'])
     def upload_blob(cls, context, type_name, artifact_id, field_name, fd,
                     content_type):
         """Upload Artifact blob"""
@@ -276,7 +275,6 @@ class Engine(object):
         return modified_af.to_dict()
 
     @classmethod
-    @lock_engine.locked(['type_name', 'artifact_id'])
     def upload_blob_dict(cls, context, type_name, artifact_id, field_name,
                          blob_key, fd, content_type):
         """Upload Artifact blob to dict"""
