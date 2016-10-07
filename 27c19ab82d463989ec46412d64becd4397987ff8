@@ -1,0 +1,9 @@
+Code-Review+2: Sergey Skripnick <sskripnick@mirantis.com>
+Code-Review+2: Darja Shakhray <dshakhray@mirantis.com>
+Workflow+1: Darja Shakhray <dshakhray@mirantis.com>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Fri, 07 Oct 2016 15:49:38 +0000
+Reviewed-on: https://review.openstack.org/383762
+Project: openstack/glare
+Branch: refs/heads/master
