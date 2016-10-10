@@ -119,7 +119,7 @@ ASYNC_EVENTLET_THREAD_POOL_LIST = []
 
 def get_num_workers():
     """Return the configured number of workers."""
-    if CONF.workers is None:
+    if not CONF.workers:
         # None implies the number of CPUs
         return processutils.get_worker_count()
     return CONF.workers
