@@ -333,7 +333,8 @@ class Engine(object):
         # try to perform blob uploading to storage backend
         try:
             location_uri, size, checksums = store_api.save_blob_to_store(
-                blob_id, fd, context, af.get_max_blob_size(field_name))
+                blob_id, fd, context, af.get_max_blob_size(field_name),
+                af.get_default_store(context, af, field_name, blob_key))
         except Exception:
             # if upload failed remove blob from db and storage
             with excutils.save_and_reraise_exception(logger=LOG):
