@@ -73,3 +73,34 @@ class BaseDBAPI(object):
         values.
         """
         raise NotImplementedError()
+
+
+class BaseStoreAPI(object):
+
+    def add_to_backend(self, context, blob_id, data, verifier=None):
+        """Save data to database store type and return location info
+
+        :param blob_id: id of artifact
+        :param data: file iterator
+        :param context: user context
+        :param verifier:signature verified
+        :return: database location uri
+        """
+        raise NotImplementedError()
+
+    def get_from_store(self, uri, context):
+        """Load file from database store
+
+        :param uri: blob uri
+        :param context: user context
+        :return: file iterator
+        """
+        raise NotImplementedError()
+
+    def delete_from_store(self, uri, context):
+        """Delete blob from database store
+
+        :param uri: blob uri
+        :param context: user context
+        """
+        raise NotImplementedError()

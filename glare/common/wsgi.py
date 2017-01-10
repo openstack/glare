@@ -128,6 +128,20 @@ This option determines how the locking will be accessed.
 If this option is set to ``glare.db.artifact_api.ArtifactLockApi``
 then the locks are stored in and read from the database via the
 SQLAlchemy Core and ORM APIs.
+""")),
+    cfg.StrOpt('database_store_api',
+               default='glare.db.artifact_api.StoreAPI',
+               help=("""
+Python class path of database store API.
+
+Specifies the path to the API to store blobs directly in database.
+
+If user chose 'database' driver for storing his binaries, then this
+API will be used instead of glance_store.
+
+If this option is set to ``glare.db.artifact_api.StoreAPI`` then
+the binary data is stored in and read from the database via the
+SQLAlchemy Core and ORM APIs.
 """))
 ]
 
@@ -184,8 +198,6 @@ def ssl_wrap_socket(sock):
 def get_socket(default_port):
     """
     Bind socket to bind ip:port in conf
-
-    note: Mostly comes from Swift with a few small changes...
 
     :param default_port: port to bind to if none is specified in conf
 
