@@ -216,6 +216,7 @@ class LimitingReader(object):
         self.data = data
         self.limit = limit
         self.bytes_read = 0
+        self.md5 = hashlib.md5()
         self.sha1 = hashlib.sha1()
         self.sha256 = hashlib.sha256()
 
@@ -232,6 +233,7 @@ class LimitingReader(object):
         len_result = len(result)
         self.bytes_read += len_result
         if len_result:
+            self.md5.update(result)
             self.sha1.update(result)
             self.sha256.update(result)
         if self.bytes_read > self.limit:
