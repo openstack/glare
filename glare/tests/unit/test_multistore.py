@@ -13,7 +13,7 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-from glare import engine
+from glare.objects.meta import registry
 from glare.tests.unit import base
 
 
@@ -28,7 +28,7 @@ class TestMultistore(base.BaseTestCase):
         self.config(
             enabled_artifact_types=[":".join(_) for _ in types.items()])
 
-        for t in engine.Engine().registry._registry._obj_classes.values():
+        for t in registry.ArtifactRegistry.obj_classes():
             name = t[0].get_type_name()
             if name == 'all':
                 continue
