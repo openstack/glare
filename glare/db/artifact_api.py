@@ -101,3 +101,18 @@ class ArtifactLockApi(locking.LockApiBase):
     def delete_lock(self, context, lock_id):
         session = api.get_session()
         api.delete_lock(context, lock_id, session)
+
+
+class StoreAPI(base_api.BaseStoreAPI):
+
+    def add_to_backend(self, blob_id, data, context, verifier=None):
+        session = api.get_session()
+        return api.save_blob_data(context, blob_id, data, session)
+
+    def get_from_store(self, uri, context):
+        session = api.get_session()
+        return api.get_blob_data(context, uri, session)
+
+    def delete_from_store(self, uri, context):
+        session = api.get_session()
+        return api.delete_blob_data(context, uri, session)
