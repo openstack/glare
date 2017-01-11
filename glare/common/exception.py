@@ -157,3 +157,8 @@ class WorkerCreationFailure(GlareException):
 
 class DBNotAllowed(GlareException):
     msg_fmt = _('This operation is not allowed with current DB')
+
+
+class BadDriverConfiguration(GlareException):
+    message = _("Driver %(driver_name)s could not be configured correctly. "
+                "Reason: %(reason)s")
