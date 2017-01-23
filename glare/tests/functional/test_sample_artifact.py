@@ -818,7 +818,7 @@ class TestBlobs(base.TestArtifact):
         self.set_user('user2')
         self.get(url=url + '/blob', status=404)
 
-    def test_blob_add_custom_location(self):
+    def test_blob_add_external_location(self):
         # Create artifact
         art = self.create_artifact({'name': 'name5',
                                     'version': '1.0',
@@ -830,15 +830,14 @@ class TestBlobs(base.TestArtifact):
                                     'string_required': '123'})
         self.assertIsNotNone(art['id'])
 
-        # Set custom location
+        # Set external location
         url = '/sample_artifact/%s' % art['id']
         body = jsonutils.dumps(
             {'url': 'https://www.apache.org/licenses/LICENSE-2.0.txt',
              'md5': "fake", 'sha1': "fake_sha", "sha256": "fake_sha256"})
         headers = {'Content-Type':
-                   'application/vnd+openstack.glare-custom-location+json'}
-        self.put(url=url + '/blob', data=body,
-                 status=200, headers=headers)
+                   'application/vnd+openstack.glare-external-location+json'}
+        self.put(url=url + '/blob', data=body, status=200, headers=headers)
 
         # test re-add failed
         self.put(url=url + '/blob', data=body, status=409, headers=headers)

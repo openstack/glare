@@ -246,21 +246,23 @@ class Engine(object):
 
     @classmethod
     def add_blob_location(cls, context, type_name, artifact_id, field_name,
-                          location, blob_meta, blob_key=None):
+                          location, blob_meta, blob_key=None, external=True):
         """Add external location to blob.
 
         :param context: user context
         :param type_name: name of artifact type
         :param artifact_id: id of the artifact to be updated
         :param field_name: name of blob or blob dict field
-        :param location: external blob url
+        :param location: blob url
         :param blob_meta: dictionary containing blob metadata like md5 checksum
         :param blob_key: if field_name is blob dict it specifies concrete key
         in this dict
+        :param: external: flag that indicates if location is external or not
         :return updated artifact
         """
         af = cls._get_artifact(context, type_name, artifact_id)
-        action_name = 'artifact:set_location'
+        action_name = 'artifact:set_external_location' if external\
+            else 'artifact:set_internal_location'
         policy.authorize(action_name, af.to_dict(), context)
 
         blob_name = "%s[%s]" % (field_name, blob_key)\
@@ -268,7 +270,7 @@ class Engine(object):
 
         blob = {'url': location, 'size': None, 'md5': None, 'sha1': None,
                 'sha256': None, 'status': glare_fields.BlobFieldType.ACTIVE,
-                'external': True, 'content_type': None}
+                'external': external, 'content_type': None}
         md5 = blob_meta.pop("md5", None)
         if md5 is None:
             msg = (_("Incorrect blob metadata %(meta)s. MD5 must be specified "
@@ -282,7 +284,7 @@ class Engine(object):
         modified_af = cls.update_blob(
             context, type_name, artifact_id, blob, field_name, blob_key,
             validate=True)
-        LOG.info(_LI("External location %(location)s has been created "
+        LOG.info(_LI("The location %(location)s has been created "
                      "successfully for artifact %(artifact)s blob %(blob)s"),
                  {'location': location, 'artifact': af.id,
                   'blob': blob_name})

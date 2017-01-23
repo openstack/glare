@@ -146,8 +146,9 @@ class RequestDeserializer(api_versioning.VersionedResource,
 
     def _deserialize_blob(self, req):
         content_type = self._get_content_type(req)
-        if content_type == ('application/vnd+openstack.glare-custom-location'
-                            '+json'):
+        if content_type in (
+                'application/vnd+openstack.glare-external-location+json',
+                'application/vnd+openstack.glare-internal-location+json'):
             data = self._get_request_body(req)
             if 'url' not in data:
                 msg = _("url is required when specifying external location. "
@@ -291,11 +292,17 @@ class ArtifactsController(api_versioning.VersionedResource):
         :param data: Artifact payload
         :param content_type: data content-type
         """
-        if content_type == ('application/vnd+openstack.glare-custom-location'
+        if content_type == ('application/vnd+openstack.glare-external-location'
                             '+json'):
             url = data.pop('url')
             return self.engine.add_blob_location(
                 req.context, type_name, artifact_id, field_name, url, data)
+        elif content_type == ('application/vnd+openstack.glare-internal'
+                              '-location+json'):
+            url = data.pop('url')
+            return self.engine.add_blob_location(
+                req.context, type_name, artifact_id, field_name, url, data,
+                external=False)
         else:
             return self.engine.upload_blob(req.context, type_name, artifact_id,
                                            field_name, data, content_type)
@@ -314,12 +321,18 @@ class ArtifactsController(api_versioning.VersionedResource):
         :param content_type: data content-type
         :param blob_key: blob key in dict
         """
-        if content_type == ('application/vnd+openstack.glare-custom-location'
+        if content_type == ('application/vnd+openstack.glare-external-location'
                             '+json'):
             url = data.pop('url')
             return self.engine.add_blob_location(
                 req.context, type_name, artifact_id, field_name, url, data,
                 blob_key)
+        elif content_type == ('application/vnd+openstack.glare-internal'
+                              '-location+json'):
+            url = data.pop('url')
+            return self.engine.add_blob_location(
+                req.context, type_name, artifact_id, field_name, url, data,
+                blob_key, external=False)
         else:
             return self.engine.upload_blob(req.context, type_name, artifact_id,
                                            field_name, data, content_type,
