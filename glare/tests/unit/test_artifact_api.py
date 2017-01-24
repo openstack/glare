@@ -28,6 +28,21 @@ class TestArtifactAPI(base.BaseTestCase):
         self.assertEqual('img', res['name'])
         self.assertEqual('1.0.0', res['version'])
 
+    def test_update_artifact(self):
+        req = self.get_fake_request(user=base.users['user1'])
+        values = {'name': 'img', 'version': '1.0'}
+        res = resource.ArtifactsController().create(req, 'images', values)
+        self.assertEqual('img', res['name'])
+        self.assertEqual('1.0.0', res['version'])
+
+        values = [{"op": "replace", "path": "/tags", "value": ['a', 'b', 'c']}]
+        patch = self.generate_json_patch(values)
+
+        res = resource.ArtifactsController().update(
+            req, 'images', res['id'], patch)
+        for tag in ('a', 'b', 'c'):
+            self.assertIn(tag, res['tags'])
+
     def test_list_artifacts(self):
         req = self.get_fake_request(user=base.users['user1'])
         res = resource.ArtifactsController().list(req, 'images', [])
