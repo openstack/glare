@@ -253,14 +253,15 @@ class Engine(object):
         :param type_name: name of artifact type
         :param artifact_id: id of the artifact to be updated
         :param field_name: name of blob or blob dict field
-        :param location: external blob url
+        :param location: blob url
         :param blob_meta: dictionary containing blob metadata like md5 checksum
         :param blob_key: if field_name is blob dict it specifies concrete key
         in this dict
         :return updated artifact
         """
         af = cls._get_artifact(context, type_name, artifact_id)
-        action_name = 'artifact:set_location'
+        action_name = 'artifact:set_custom_location' if location.startswith("http")\
+            else 'artifact:set_system_location'
         policy.authorize(action_name, af.to_dict(), context)
 
         blob_name = "%s[%s]" % (field_name, blob_key)\
@@ -269,20 +270,13 @@ class Engine(object):
         blob = {'url': location, 'size': None, 'md5': None, 'sha1': None,
                 'sha256': None, 'status': glare_fields.BlobFieldType.ACTIVE,
                 'external': True, 'content_type': None}
-        md5 = blob_meta.pop("md5", None)
-        if md5 is None:
-            msg = (_("Incorrect blob metadata %(meta)s. MD5 must be specified "
-                     "for external location in artifact blob %(blob_name)."),
-                   {"meta": str(blob_meta), "blob_name": blob_name})
-            raise exception.BadRequest(msg)
-        else:
-            blob["md5"] = md5
-            blob["sha1"] = blob_meta.pop("sha1", None)
-            blob["sha256"] = blob_meta.pop("sha256", None)
+        blob["md5"] = blob_meta.pop("md5")
+        blob["sha1"] = blob_meta.pop("sha1", None)
+        blob["sha256"] = blob_meta.pop("sha256", None)
         modified_af = cls.update_blob(
             context, type_name, artifact_id, blob, field_name, blob_key,
             validate=True)
-        LOG.info(_LI("External location %(location)s has been created "
+        LOG.info(_LI("The location %(location)s has been created "
                      "successfully for artifact %(artifact)s blob %(blob)s"),
                  {'location': location, 'artifact': af.id,
                   'blob': blob_name})
@@ -447,9 +441,10 @@ class Engine(object):
                 'sha1': blob.get('sha1'),
                 'sha256': blob.get('sha256'),
                 'external': blob.get('external')}
-        if blob['external']:
+        if blob['external'] and blob['url'].startswith('http'):
             data = {'url': blob['url']}
         else:
+            blob['external'] = False
             data = store_api.load_from_store(uri=blob['url'], context=context)
             meta['size'] = blob.get('size')
             meta['content_type'] = blob.get('content_type')

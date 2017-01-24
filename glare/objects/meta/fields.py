@@ -95,7 +95,7 @@ class BlobFieldType(fields.FieldType):
         prim = {key: val for key, val in six.iteritems(value)
                 if key != 'id'}
 
-        if not value.get('external'):
+        if not value['external'] or not value['url'].startswith("http"):
             url = '/artifacts/%(name)s/%(id)s/' % {
                 "name": obj.get_type_name(),
                 'id': obj.id

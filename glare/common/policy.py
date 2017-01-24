@@ -65,8 +65,11 @@ artifact_policy_rules = [
                                           "rule:artifact:delete_public and "
                                           "rule:artifact:delete_deactivated",
                        "Policy to delete artifacts"),
-    policy.RuleDefault("artifact:set_location", "rule:admin_or_owner",
+    policy.RuleDefault("artifact:set_custom_location", "rule:admin_or_owner",
                        "Policy to set custom location for artifact"),
+    policy.RuleDefault("artifact:set_system_location",
+                       "rule:context_is_admin",
+                       "Policy to set system location for artifact"),
     policy.RuleDefault("artifact:upload", "rule:admin_or_owner",
                        "Policy to upload blob for artifact"),
     policy.RuleDefault("artifact:download", "",
