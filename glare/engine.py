@@ -337,7 +337,7 @@ class Engine(object):
             default_store = af.get_default_store(
                 context, af, field_name, blob_key)
             if default_store not in set(CONF.glance_store.stores):
-                LOG.warn("Incorrect backend configuration - scheme '%s' is not"
+                LOG.warning("Incorrect backend configuration - scheme '%s' is not"
                          " supported. Fallback to default store."
                          % default_store)
                 default_store = None
