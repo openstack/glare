@@ -223,7 +223,6 @@ class BaseArtifact(base.VersionedObject):
                 cls.fields[field_name].element_type ==
                 glare_fields.LinkFieldType)
 
-
     @classmethod
     def _init_artifact(cls, context, values):
         """Initialize an empty versioned object with values
