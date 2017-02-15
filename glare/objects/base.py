@@ -390,6 +390,20 @@ class BaseArtifact(base.VersionedObject):
             # apply values to the artifact. if all changes applied then update
             # values in db or raise an exception in other case.
             for key, value in six.iteritems(values):
+                try:
+                    # check updates for links and validate them
+                    if cls.is_link(key) and value is not None:
+                        cls._validate_link(key, value, context)
+                    elif cls.is_link_dict(key) and value:
+                        for l in value:
+                            cls._validate_link(key, value[l], context)
+                    elif cls.is_link_list(key) and value:
+                        for l in value:
+                            cls._validate_link(key, l, context)
+                except Exception as e:
+                    msg = (_("Bad link in artifact %(af)s: %(msg)s")
+                           % {"af": af.id, "msg": str(e)})
+                    raise exception.BadRequest(msg)
                 setattr(af, key, value)
 
             LOG.info(_LI("Parameters validation for artifact %(artifact)s "
@@ -400,7 +414,7 @@ class BaseArtifact(base.VersionedObject):
             return cls._init_artifact(context, updated_af)
 
     @classmethod
-    def get_action_for_updates(cls, context, artifact, updates, registry):
+    def get_action_for_updates(cls, context, artifact, updates):
         """The method defines how to detect appropriate action based on update
 
         Validate request for update and determine if it is request for action.
@@ -422,50 +436,23 @@ class BaseArtifact(base.VersionedObject):
                 else:
                     action = cls.activate
 
-        # check updates for links and validate them
-        try:
-            for key, value in six.iteritems(updates):
-                if cls.is_link(key) and value is not None:
-                    cls._validate_link(key, value, context, registry)
-                elif cls.is_link_dict(key) and value:
-                    for l in value:
-                        cls._validate_link(key, value[l], context, registry)
-                elif cls.is_link_list(key) and value:
-                    for l in value:
-                        cls._validate_link(key, l, context, registry)
-        except Exception as e:
-            msg = (_("Bad link in artifact %(af)s: %(msg)s")
-                   % {"af": artifact.id, "msg": str(e)})
-            raise exception.BadRequest(msg)
-
         LOG.debug("Action %(action)s defined to updates %(updates)s.",
                   {'action': action.__name__, 'updates': updates})
 
         return action
 
     @classmethod
-    def _validate_link(cls, key, value, context, registry):
+    def _validate_link(cls, key, value, ctx):
         # check format
         glare_fields.LinkFieldType.coerce(None, key, value)
         # check containment
         if glare_fields.LinkFieldType.is_external(value):
-            # validate external link
-            cls._validate_external_link(value)
+            with urlrequest.urlopen(value) as data:
+                data.read(1)
         else:
-            type_name = (glare_fields.LinkFieldType.
-                         get_type_name(value))
-            af_type = registry.get_artifact_type(type_name)
-            cls._validate_soft_link(context, value, af_type)
-
-    @classmethod
-    def _validate_external_link(cls, link):
-        with urlrequest.urlopen(link) as data:
-            data.read(1)
-
-    @classmethod
-    def _validate_soft_link(cls, context, link, af_type):
-        af_id = link.split('/')[3]
-        af_type.get(context, af_id)
+            filters = [('id', None, 'eq', None, value.split('/')[3])]
+            if len(cls.db_api.list(ctx, filters, None, 1, [], False)) == 0:
+                raise exception.NotFound
 
     @classmethod
     def get(cls, context, artifact_id):
