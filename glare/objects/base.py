@@ -37,8 +37,8 @@ from glare.objects.meta import validators
 artifact_opts = [
     cfg.BoolOpt('delayed_blob_delete', default=False,
                 help=_("Defines if blob must be deleted immediately "
-                       "or just marked as deleted so it can be cleaned by some"
-                       "other tool in background.")),
+                       "or just marked as pending delete so it can be cleaned "
+                       "by some other tool in the background.")),
 ]
 
 CONF = cfg.CONF
@@ -332,8 +332,7 @@ class BaseArtifact(base.VersionedObject):
         :param is_public: flag that indicates to search artifact globally
         """
         if version is not None and name not in (None, ""):
-            filters = [('name', name), ('version', version),
-                       ('status', 'neq:deleted')]
+            filters = [('name', name), ('version', version)]
             if is_public is False:
                 filters.extend([('owner', context.tenant),
                                 ('visibility', 'private')])
@@ -609,11 +608,7 @@ class BaseArtifact(base.VersionedObject):
 
     @staticmethod
     def _prepare_blob_delete(b, af, name):
-        if b['status'] == glare_fields.BlobFieldType.PENDING_DELETE:
-            msg = _('Blob %(name)s is already deleting '
-                    'for artifact %(id)s') % {'name': name, 'id': af.id}
-            raise exception.Conflict(msg)
-        elif b['status'] == glare_fields.BlobFieldType.SAVING:
+        if b['status'] == glare_fields.BlobFieldType.SAVING:
             msg = _('Blob %(name)s is saving for artifact %(id)s'
                     ) % {'name': name, 'id': af.id}
             raise exception.Conflict(msg)
@@ -641,8 +636,8 @@ class BaseArtifact(base.VersionedObject):
         :param context: user context
         :param af: artifact object targeted for deletion
         """
-        # marking artifact as deleted
-        cls.db_api.update(context, af.id, {'status': cls.STATUS.DELETED})
+        # deactivate artifact for deletion period
+        cls.db_api.update(context, af.id, {'status': cls.STATUS.DEACTIVATED})
 
         # marking all blobs as pending delete
         blobs = {}
@@ -658,17 +653,20 @@ class BaseArtifact(base.VersionedObject):
                     for key, b in six.iteritems(bd):
                         cls._prepare_blob_delete(b, af, name)
                     blobs[name] = bd
-        LOG.debug("Marked artifact %(artifact)s as deleted and all its blobs "
-                  "%(blobs) as pending delete.",
+        LOG.debug("Marked artifact %(artifact)s as deactivated and all its "
+                  "blobs %(blobs) as pending delete.",
                   {'artifact': af.id, 'blobs': blobs})
+
         cls.db_api.update_blob(context, af.id, blobs)
 
-        if blobs and not CONF.delayed_blob_delete:
-            # delete blobs one by one
-            cls._delete_blobs(blobs, context, af)
-            LOG.info(_LI("Blobs successfully deleted for artifact %s"), af.id)
-        # delete artifact itself
-        cls.db_api.delete(context, af.id)
+        if not CONF.delayed_blob_delete:
+            if blobs and not CONF.delayed_blob_delete:
+                # delete blobs one by one
+                cls._delete_blobs(blobs, context, af)
+                LOG.info(_LI("Blobs were successfully deleted "
+                             "from artifact %s"), af.id)
+                # delete artifact itself
+            cls.db_api.delete(context, af.id)
 
     @classmethod
     def activate(cls, context, af, values):

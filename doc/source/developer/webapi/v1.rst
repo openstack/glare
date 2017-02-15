@@ -43,8 +43,6 @@ using Representational State Transfer concept (ReST).
   * *deactivated* - Artifact is not available to other users except
     administrators. Used when Cloud Admin need to check the artifact.
 
-  * *deleted* - Artifact's deleted.
-
 .. list-table::  **Artifact status transition table**
    :header-rows: 1
 
@@ -52,30 +50,20 @@ using Representational State Transfer concept (ReST).
      - drafted
      - active
      - deactivated
-     - deleted
 
    * - **drafted**
      - X
      - activate Artifact
      - N/A
-     - delete Artifact
 
    * - **active**
      - N/A
      - X
      - deactivate Artifact
-     - delete Artifact
 
    * - **deactivated**
      - N/A
      - reactivate Artifact
-     - X
-     - delete Artifact
-
-   * - **deleted**
-     - N/A
-     - N/A
-     - N/A
      - X
 
 

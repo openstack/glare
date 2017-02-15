@@ -25,15 +25,11 @@ from glare.i18n import _
 
 
 class ArtifactStatusField(fields.StateMachine):
-    ARTIFACT_STATUS = (DRAFTED, ACTIVE, DEACTIVATED, DELETED) = (
-        'drafted', 'active', 'deactivated', 'deleted')
+    ARTIFACT_STATUS = (DRAFTED, ACTIVE, DEACTIVATED) = (
+        'drafted', 'active', 'deactivated')
 
-    ALLOWED_TRANSITIONS = {
-        DRAFTED: {DRAFTED, ACTIVE, DELETED},
-        ACTIVE: {ACTIVE, DEACTIVATED, DELETED},
-        DEACTIVATED: {DEACTIVATED, ACTIVE, DELETED},
-        DELETED: {DELETED}
-    }
+    ALLOWED_TRANSITIONS = {DRAFTED: {ACTIVE}, ACTIVE: {DEACTIVATED},
+                           DEACTIVATED: {ACTIVE}}
 
     def __init__(self, **kwargs):
             super(ArtifactStatusField, self).__init__(self.ARTIFACT_STATUS,
