@@ -601,6 +601,7 @@ def _do_blobs(artifact, new_blobs):
 
 @retry(retry_on_exception=_retry_on_deadlock, wait_fixed=500,
        stop_max_attempt_number=50)
+@utils.no_4byte_params
 def create_lock(context, lock_key, session):
     """Try to create lock record."""
     with session.begin():
