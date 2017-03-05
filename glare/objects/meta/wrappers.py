@@ -103,8 +103,7 @@ class Field(object):
 
     @staticmethod
     def get_allowed_filter_ops(field):
-        if field in (fields.StringField, fields.String,
-                     glare_fields.ArtifactStatusField):
+        if field in (fields.StringField, fields.String):
             return [FILTER_EQ, FILTER_NEQ, FILTER_IN]
         elif field in (fields.IntegerField, fields.Integer, fields.FloatField,
                        fields.Float, glare_fields.VersionField):
@@ -122,7 +121,9 @@ class Field(object):
         if issubclass(self.field_class, fields.StringField):
             # check if fields is string
             if not any(isinstance(v, val_lib.MaxStrLen)
-                       for v in self.validators):
+                       for v in self.validators) and \
+                    not any(isinstance(v, val_lib.AllowedValues)
+                            for v in self.validators):
                 default.append(val_lib.MaxStrLen(255))
         return default
 
