@@ -943,11 +943,11 @@ class TestArtifactOps(base.TestArtifact):
     def test_create(self):
         """All tests related to artifact creation"""
         # check that cannot create artifact for non-existent artifact type
-        self.post('/incorrect_artifact', {}, status=404)
+        self.post('/incorrect_artifact', {"name": "t"}, status=404)
         # check that cannot accept non-json body
         self.post('/incorrect_artifact', "incorrect_body", status=400)
         # check that cannot accept incorrect content type
-        self.post('/sample_artifact', {}, status=415,
+        self.post('/sample_artifact', {"name": "t"}, status=415,
                   headers={"Content-Type": "application/octet-stream"})
         # check that cannot create artifact without name
         self.create_artifact(data={"int1": 1024}, status=400)
@@ -1090,6 +1090,15 @@ class TestArtifactOps(base.TestArtifact):
                   "version": "0.0.1"})
 
         url = '/sample_artifact/%s' % private_art['id']
+        # test that we cannot publish drafted artifact
+        self.patch(url=url, data=self.make_public, status=400)
+
+        self.patch(url=url, data=self.make_active)
+
+        # test that cannot publish deactivated artifact
+        self.patch(url, data=self.make_deactivated)
+        self.patch(url, data=self.make_public, status=400)
+
         self.patch(url=url, data=self.make_active)
 
         # test that only visibility must be specified in the request
@@ -1113,14 +1122,9 @@ class TestArtifactOps(base.TestArtifact):
             data={"name": "test_af", "string_required": "test_str",
                   "version": "0.0.1"})
         dup_url = '/sample_artifact/%s' % duplicate_art['id']
-        # test that we cannot publish drafted artifact
-        self.patch(url=dup_url, data=self.make_public, status=400)
         # proceed with duplicate testing
         self.patch(url=dup_url, data=self.make_active)
         self.patch(url=dup_url, data=self.make_public, status=409)
-        # test that cannot publish deactivated artifact
-        self.patch(dup_url, data=self.make_deactivated)
-        self.patch(dup_url, data=self.make_public, status=400)
 
     def test_delete(self):
         # try ro delete not existing artifact
