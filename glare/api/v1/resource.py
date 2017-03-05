@@ -221,6 +221,13 @@ class ArtifactsController(api_versioning.VersionedResource):
         if req.context.tenant is None or req.context.read_only:
             msg = _("It's forbidden to anonymous users to create artifacts.")
             raise exc.Forbidden(msg)
+        if not values.get('name'):
+            msg = _("Name must be specified at creation.")
+            raise exc.BadRequest(msg)
+        for field in ('visibility', 'status'):
+            if field in values:
+                msg = _("%s is not allowed in a request at creation.") % field
+                raise exc.BadRequest(msg)
         return self.engine.create(req.context, type_name, values)
 
     @supported_versions(min_ver='1.0')
