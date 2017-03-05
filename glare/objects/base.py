@@ -29,7 +29,6 @@ from glare.common import store_api
 from glare.common import utils
 from glare.db import artifact_api
 from glare.i18n import _
-from glare import locking
 from glare.objects.meta import fields as glare_fields
 from glare.objects.meta import validators
 from glare.objects.meta import wrappers
@@ -131,7 +130,6 @@ class BaseArtifact(base.VersionedObject):
     }
 
     db_api = artifact_api.ArtifactAPI()
-    lock_engine = locking.LockEngine(artifact_api.ArtifactLockApi())
 
     @classmethod
     def is_blob(cls, field_name):
@@ -221,25 +219,6 @@ class BaseArtifact(base.VersionedObject):
         raise NotImplementedError()
 
     @classmethod
-    def _get_scoped_lock(cls, af, values):
-        """Create scope lock for artifact update.
-
-        :param values: artifact values
-        :return: Lock object
-        """
-        name = values.get('name', af.name)
-        version = values.get('version', af.version)
-        visibility = values.get('visibility', af.visibility)
-        scope_id = None
-        if (name, version, visibility) != (af.name, af.version, af.visibility):
-            # no version change == no lock for version
-            scope_id = "%s:%s:%s" % (cls.get_type_name(), name, str(version))
-            if visibility != 'public':
-                scope_id += ':%s' % str(af.obj_context.tenant)
-
-        return cls.lock_engine.acquire(af.obj_context, scope_id)
-
-    @classmethod
     def create(cls, context, values):
         """Create new artifact in Glare repo.
 
@@ -247,57 +226,23 @@ class BaseArtifact(base.VersionedObject):
         :param values: dictionary with specified artifact fields
         :return: created artifact object
         """
-        name = values.get('name')
-        ver = str(values.setdefault('version', cls.DEFAULT_ARTIFACT_VERSION))
-        scope_id = "%s:%s:%s" % (cls.get_type_name(), name, ver)
-        with cls.lock_engine.acquire(context, scope_id):
-            cls._validate_versioning(context, name, ver)
-            # validate other values
-            cls._validate_change_allowed(values)
-            # validate visibility
-            if 'visibility' in values:
-                msg = _("visibility is not allowed in a request "
-                        "for artifact create.")
-                raise exception.BadRequest(msg)
-            values['id'] = str(uuid.uuid4())
-            values['owner'] = context.tenant
-            values['created_at'] = timeutils.utcnow()
-            values['updated_at'] = values['created_at']
-            af = cls._init_artifact(context, values)
-            LOG.info("Parameters validation for artifact creation "
-                     "passed for request %s.", context.request_id)
-            af_vals = cls.db_api.create(
-                context, af._obj_changes_to_primitive(), cls.get_type_name())
-            return cls._init_artifact(context, af_vals)
+        cls._validate_change_allowed(values)
 
-    @classmethod
-    def _validate_versioning(cls, context, name, version, is_public=False):
-        """Validate if artifact with given name and version already exists.
-
-        :param context: user context
-        :param name: name of artifact to be checked
-        :param version: version of artifact
-        :param is_public: flag that indicates to search artifact globally
-        """
-        if version is not None and name not in (None, ""):
-            filters = [('name', 'eq:' + name), ('version', 'eq:' + version)]
-            if is_public is False:
-                filters.extend([('owner', 'eq:' + context.tenant),
-                                ('visibility', 'private')])
-            else:
-                filters.extend([('visibility', 'public')])
-            if len(cls.list(context, filters)) > 0:
-                msg = _("Artifact with this name and version already "
-                        "exists for this owner.")
-                raise exception.Conflict(msg)
-        else:
-            msg = _("Cannot set artifact version without name and version.")
-            raise exception.BadRequest(msg)
+        values['id'] = str(uuid.uuid4())
+        values['owner'] = context.tenant
+        values['created_at'] = timeutils.utcnow()
+        values['updated_at'] = values['created_at']
+        af = cls._init_artifact(context, values)
+        LOG.info("Parameters validation for artifact creation "
+                 "passed for request %s.", context.request_id)
+        af_vals = cls.db_api.create(
+            context, af._obj_changes_to_primitive(), cls.get_type_name())
+        return cls._init_artifact(context, af_vals)
 
     @classmethod
     def _validate_change_allowed(cls, field_names, af=None,
                                  validate_blob_names=True):
-        """Validate if fields can be updated in artifact."""
+        """Validate if fields can be set for the artifact."""
         af_status = cls.STATUS.DRAFTED if af is None else af.status
         if af_status not in (cls.STATUS.ACTIVE, cls.STATUS.DRAFTED):
             msg = _("Forbidden to change fields "
@@ -334,45 +279,33 @@ class BaseArtifact(base.VersionedObject):
         """
         # reset all changes of artifact to reuse them after update
         af.obj_reset_changes()
-        with cls._get_scoped_lock(af, values):
-            # validate version
-            if 'name' in values or 'version' in values:
-                new_name = values.get('name') if 'name' in values else af.name
-                if not isinstance(new_name, six.string_types):
-                    new_name = str(new_name)
-                new_version = values.get('version') \
-                    if 'version' in values else af.version
-                if not isinstance(new_version, six.string_types):
-                    new_version = str(new_version)
-                cls._validate_versioning(context, new_name, new_version)
 
-            # validate other values
-            cls._validate_change_allowed(values, af)
-            # apply values to the artifact. if all changes applied then update
-            # values in db or raise an exception in other case.
-            for key, value in values.items():
-                try:
-                    # check updates for links and validate them
-                    if cls.is_link(key) and value is not None:
-                        cls._validate_link(key, value, context)
-                    elif cls.is_link_dict(key) and value:
-                        for l in value:
-                            cls._validate_link(key, value[l], context)
-                    elif cls.is_link_list(key) and value:
-                        for l in value:
-                            cls._validate_link(key, l, context)
-                except Exception as e:
-                    msg = (_("Bad link in artifact %(af)s: %(msg)s")
-                           % {"af": af.id, "msg": str(e)})
-                    raise exception.BadRequest(msg)
-                setattr(af, key, value)
+        cls._validate_change_allowed(values, af)
+        # apply values to the artifact. if all changes applied then update
+        # values in db or raise an exception in other case.
+        for key, value in six.iteritems(values):
+            try:
+                # check updates for links and validate them
+                if cls.is_link(key) and value is not None:
+                    cls._validate_link(key, value, context)
+                elif cls.is_link_dict(key) and value:
+                    for l in value:
+                        cls._validate_link(key, value[l], context)
+                elif cls.is_link_list(key) and value:
+                    for l in value:
+                        cls._validate_link(key, l, context)
+            except Exception as e:
+                msg = (_("Bad link in artifact %(af)s: %(msg)s")
+                       % {"af": af.id, "msg": str(e)})
+                raise exception.BadRequest(msg)
+            setattr(af, key, value)
 
-            LOG.info("Parameters validation for artifact %(artifact)s "
-                     "update passed for request %(request)s.",
-                     {'artifact': af.id, 'request': context.request_id})
-            updated_af = cls.db_api.update(
-                context, af.id, af._obj_changes_to_primitive())
-            return cls._init_artifact(context, updated_af)
+        LOG.info("Parameters validation for artifact %(artifact)s "
+                 "update passed for request %(request)s.",
+                 {'artifact': af.id, 'request': context.request_id})
+        updated_af = cls.db_api.update(
+            context, af.id, af._obj_changes_to_primitive())
+        return cls._init_artifact(context, updated_af)
 
     @classmethod
     def get_action_for_updates(cls, context, af, values):
@@ -747,19 +680,16 @@ class BaseArtifact(base.VersionedObject):
                     "for artifact publish.")
             raise exception.BadRequest(msg)
 
-        with cls._get_scoped_lock(af, values):
-            if af.status != cls.STATUS.ACTIVE:
-                msg = _("Cannot publish non-active artifact")
-                raise exception.BadRequest(msg)
+        if af.status != cls.STATUS.ACTIVE:
+            msg = _("Cannot publish non-active artifact")
+            raise exception.BadRequest(msg)
 
-            cls._validate_versioning(context, af.name, af.version,
-                                     is_public=True)
-            cls.validate_publish(context, af)
-            LOG.info("Parameters validation for artifact %(artifact)s "
-                     "publish passed for request %(request)s.",
-                     {'artifact': af.id, 'request': context.request_id})
-            af = cls.db_api.update(context, af.id, {'visibility': 'public'})
-            return cls._init_artifact(context, af)
+        cls.validate_publish(context, af)
+        LOG.info("Parameters validation for artifact %(artifact)s "
+                 "publish passed for request %(request)s.",
+                 {'artifact': af.id, 'request': context.request_id})
+        af = cls.db_api.update(context, af.id, {'visibility': 'public'})
+        return cls._init_artifact(context, af)
 
     @classmethod
     def get_max_blob_size(cls, field_name):
