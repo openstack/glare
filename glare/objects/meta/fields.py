@@ -12,8 +12,6 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-import uuid
-
 import jsonschema
 from jsonschema import exceptions as json_exceptions
 from oslo_versionedobjects import fields
@@ -24,22 +22,6 @@ import six.moves.urllib.request as urlrequest
 
 from glare.common import exception
 from glare.i18n import _
-
-
-class ArtifactStatusField(fields.StateMachine):
-    ARTIFACT_STATUS = (DRAFTED, ACTIVE, DEACTIVATED, DELETED) = (
-        'drafted', 'active', 'deactivated', 'deleted')
-
-    ALLOWED_TRANSITIONS = {
-        DRAFTED: {DRAFTED, ACTIVE, DELETED},
-        ACTIVE: {ACTIVE, DEACTIVATED, DELETED},
-        DEACTIVATED: {DEACTIVATED, ACTIVE, DELETED},
-        DELETED: {DELETED}
-    }
-
-    def __init__(self, **kwargs):
-            super(ArtifactStatusField, self).__init__(self.ARTIFACT_STATUS,
-                                                      **kwargs)
 
 
 class Version(fields.FieldType):
@@ -83,7 +65,6 @@ class BlobFieldType(fields.FieldType):
         if not isinstance(value, dict):
             raise ValueError(_("Blob value must be dict. Got %s type instead")
                              % type(value))
-        value.setdefault('id', str(uuid.uuid4()))
         try:
             jsonschema.validate(value, BlobFieldType.BLOB_SCHEMA)
         except json_exceptions.ValidationError as e:
