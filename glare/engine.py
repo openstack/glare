@@ -14,20 +14,21 @@
 #    under the License.
 
 import os
+import uuid
 
 import jsonpatch
 from oslo_config import cfg
 from oslo_log import log as logging
 from oslo_utils import excutils
+from oslo_utils import timeutils
 
 from glare.common import exception
 from glare.common import policy
 from glare.common import store_api
-from glare.common import utils
+from glare.db import artifact_api
 from glare.i18n import _
+from glare import locking
 from glare.notification import Notifier
-from glare.objects import base
-from glare.objects.meta import fields as glare_fields
 from glare.objects.meta import registry
 
 CONF = cfg.CONF
@@ -62,8 +63,34 @@ class Engine(object):
             self.schemas[type_name] = registry.ArtifactRegistry.\
                 get_artifact_type(type_name).gen_schemas()
 
-    @classmethod
-    def _get_artifact(cls, ctx, type_name, artifact_id, read_only=False):
+    lock_engine = locking.LockEngine(artifact_api.ArtifactLockApi())
+
+    def _create_scoped_lock(self, context, type_name, name, version,
+                            owner, visibility='private'):
+        """Create scoped lock for artifact."""
+        # validate that artifact doesn't exist for the scope
+        filters = [('name', 'eq:' + name), ('version', 'eq:' + version)]
+        if visibility == 'public':
+            filters.extend([('visibility', 'public')])
+        elif visibility == 'private':
+            filters.extend([('owner', 'eq:' + owner),
+                            ('visibility', 'private')])
+
+        scope_id = "%s:%s:%s" % (type_name, name, version)
+        if visibility != 'public':
+            scope_id += ':%s' % owner
+        lock = self.lock_engine.acquire(context, scope_id)
+
+        if len(self.list(context, type_name, filters)) > 0:
+            self.lock_engine.release(lock)
+            msg = _("Artifact with this name and version is already "
+                    "exists for this scope.")
+            raise exception.Conflict(msg)
+
+        return lock
+
+    @staticmethod
+    def _show_artifact(ctx, type_name, artifact_id, read_only=False):
         """Return artifact requested by user.
 
         Check access permissions and policies.
@@ -76,7 +103,8 @@ class Engine(object):
         """
         artifact_type = registry.ArtifactRegistry.get_artifact_type(type_name)
         # only artifact is available for class users
-        af = artifact_type.get(ctx, artifact_id)
+        af = artifact_type.show(ctx, artifact_id)
+        af._enable_user_input_validation = True
         if not read_only:
             if not ctx.is_admin and ctx.tenant != af.owner or ctx.read_only:
                 raise exception.Forbidden()
@@ -96,8 +124,58 @@ class Engine(object):
             raise exception.NotFound(message=msg)
         return self.schemas[type_name]
 
-    @classmethod
-    def create(cls, context, type_name, values):
+    def _apply_patch(self, context, af, patch):
+        # This function is a collection of hacks and workarounds to make
+        # json patch apply changes to oslo_vo object.
+        action_names = ['artifact:update']
+        af_dict = af.to_dict()
+        try:
+            for operation in patch._ops:
+                # format of location is "/key/value" or just "/key"
+                # first case symbolizes that we have dict or list insertion,
+                # second, that we work with a field itself.
+                items = operation.location.split('/', 2)
+                field_name = items[1]
+                if af.is_blob(field_name) or af.is_blob_dict(field_name):
+                    msg = _("Cannot add blob with this request. "
+                            "Use special Blob API for that.")
+                    raise exception.BadRequest(msg)
+                if field_name not in af.fields:
+                    msg = _("Cannot add new field '%s' to "
+                            "artifact.") % field_name
+                    raise exception.BadRequest(msg)
+                if len(items) == 2 and operation.operation['op'] == 'remove':
+                    msg = _("Cannot remove field '%s' from "
+                            "artifact.") % field_name
+                    raise exception.BadRequest(msg)
+                # work with hooks and define action names
+                if field_name == 'visibility':
+                    af.validate_publish(context, af)
+                    action_names.append('artifact:publish')
+                elif field_name == 'status':
+                    if operation.operation['value'] == 'deactivated':
+                        action_names.append('artifact:deactivate')
+                    elif operation.operation['value'] == 'active':
+                        if af.status == 'deactivated':
+                            action_names.append('artifact:reactivate')
+                        else:
+                            af.validate_activate(context, af)
+                            action_names.append('artifact:activate')
+
+                af_dict = operation.apply(af_dict)
+                old_value = getattr(af, field_name)
+                new_val = af_dict[field_name]
+                if new_val is None or new_val != old_value:
+                    setattr(af, field_name, new_val)
+                    if getattr(af, field_name) == old_value:
+                        af.obj_reset_changes([field_name])
+        except (jsonpatch.JsonPatchException,
+                jsonpatch.JsonPointerException, TypeError) as e:
+            raise exception.BadRequest(message=str(e))
+
+        return action_names
+
+    def create(self, context, type_name, values):
         """Create artifact record in Glare.
 
         :param context: user context
@@ -108,15 +186,28 @@ class Engine(object):
         action_name = "artifact:create"
         policy.authorize(action_name, values, context)
         artifact_type = registry.ArtifactRegistry.get_artifact_type(type_name)
-        # acquire version lock and execute artifact create
-        af = artifact_type.create(context, values)
-        # notify about new artifact
-        Notifier.notify(context, action_name, af)
-        # return artifact to the user
-        return af.to_dict()
+        values.setdefault('version', artifact_type.DEFAULT_ARTIFACT_VERSION)
+        init_values = {
+            'id': str(uuid.uuid4()),
+            'name': values.pop('name'),
+            'version': values.pop('version'),
+            'owner': context.tenant,
+            'created_at': timeutils.utcnow(),
+            'updated_at': timeutils.utcnow()
+        }
+        af = artifact_type.init_artifact(context, init_values)
+        af._enable_user_input_validation = True
+        # acquire scoped lock and execute artifact create
+        with self._create_scoped_lock(context, type_name, af.name,
+                                      af.version, context.tenant):
+            self._apply_patch(context, af, jsonpatch.make_patch({}, values))
+            af = af.create(context)
+            # notify about new artifact
+            Notifier.notify(context, action_name, af)
+            # return artifact to the user
+            return af.to_dict()
 
-    @classmethod
-    def update(cls, context, type_name, artifact_id, patch):
+    def save(self, context, type_name, artifact_id, patch):
         """Update artifact with json patch.
 
         Apply patch to artifact and validate artifact before updating it
@@ -129,55 +220,36 @@ class Engine(object):
         :param patch: json patch object
         :return: dict representation of updated artifact
         """
-
-        def _get_updates(af_dict, patch_with_upd):
-            """Get updated values for artifact and json patch.
-
-            :param af_dict: current artifact definition as dict
-            :param patch_with_upd: json-patch object
-            :return: dict of updated attributes and their values
-            """
-            try:
-                af_dict_patched = patch_with_upd.apply(af_dict)
-                diff = utils.DictDiffer(af_dict_patched, af_dict)
-
-                # we mustn't add or remove attributes from artifact
-                if diff.added() or diff.removed():
-                    msg = _(
-                        "Forbidden to add or remove attributes from artifact. "
-                        "Added attributes %(added)s. "
-                        "Removed attributes %(removed)s") % {
-                        'added': diff.added(), 'removed': diff.removed()
-                    }
-                    raise exception.BadRequest(message=msg)
-
-                return {key: af_dict_patched[key] for key in diff.changed()}
-
-            except (jsonpatch.JsonPatchException,
-                    jsonpatch.JsonPointerException,
-                    KeyError) as e:
-                raise exception.BadRequest(message=str(e))
-            except TypeError as e:
-                msg = _("Incorrect type of the element. Reason: %s") % str(e)
-                raise exception.BadRequest(msg)
         lock_key = "%s:%s" % (type_name, artifact_id)
-        with base.BaseArtifact.lock_engine.acquire(context, lock_key):
-            af = cls._get_artifact(context, type_name, artifact_id)
-            af_dict = af.to_dict()
-            updates = _get_updates(af_dict, patch)
+        with self.lock_engine.acquire(context, lock_key):
+            af = self._show_artifact(context, type_name, artifact_id)
+            af.obj_reset_changes()
+            action_names = self._apply_patch(context, af, patch)
+            updates = af.obj_changes_to_primitive()
+
             LOG.debug("Update diff successfully calculated for artifact "
                       "%(af)s %(diff)s", {'af': artifact_id, 'diff': updates})
             if not updates:
-                return af_dict
-            action = af.get_action_for_updates(context, af, updates)
-            action_name = "artifact:%s" % action.__name__
-            policy.authorize(action_name, af_dict, context)
-            modified_af = action(context, af, updates)
-            Notifier.notify(context, action_name, modified_af)
+                return af.to_dict()
+
+            for action_name in action_names:
+                policy.authorize(action_name, af.to_dict(), context)
+
+            if any(i in updates for i in ('name', 'version', 'visibility')):
+                # to change an artifact scope it's required to set a lock first
+                with self._create_scoped_lock(
+                        context, type_name, updates.get('name', af.name),
+                        updates.get('version', af.version), af.owner,
+                        updates.get('visibility', af.visibility)):
+                    modified_af = af.save(context)
+            else:
+                modified_af = af.save(context)
+
+            for action_name in action_names:
+                Notifier.notify(context, action_name, modified_af)
             return modified_af.to_dict()
 
-    @classmethod
-    def get(cls, context, type_name, artifact_id):
+    def show(self, context, type_name, artifact_id):
         """Show detailed artifact info.
 
         :param context: user context
@@ -186,12 +258,12 @@ class Engine(object):
         :return: definition of requested artifact
         """
         policy.authorize("artifact:get", {}, context)
-        af = cls._get_artifact(context, type_name, artifact_id,
-                               read_only=True)
+        af = self._show_artifact(context, type_name, artifact_id,
+                                 read_only=True)
         return af.to_dict()
 
-    @classmethod
-    def list(cls, context, type_name, filters, marker=None, limit=None,
+    @staticmethod
+    def list(context, type_name, filters, marker=None, limit=None,
              sort=None, latest=False):
         """Return list of artifacts requested by user.
 
@@ -215,21 +287,20 @@ class Engine(object):
                                                 limit, sort, latest)]
         return af_list
 
-    @classmethod
-    def delete(cls, context, type_name, artifact_id):
+    def delete(self, context, type_name, artifact_id):
         """Delete artifact from Glare.
 
         :param context: User context
         :param type_name: Artifact type name
         :param artifact_id: id of artifact to delete
         """
-        af = cls._get_artifact(context, type_name, artifact_id)
+        af = self._show_artifact(context, type_name, artifact_id)
         policy.authorize("artifact:delete", af.to_dict(), context)
+        af.validate_delete(context, af)
         af.delete(context, af)
         Notifier.notify(context, "artifact.delete", af)
 
-    @classmethod
-    def add_blob_location(cls, context, type_name, artifact_id, field_name,
+    def add_blob_location(self, context, type_name, artifact_id, field_name,
                           location, blob_meta, blob_key=None):
         """Add external location to blob.
 
@@ -243,29 +314,22 @@ class Engine(object):
          in this dict
         :return: dict representation of updated artifact
         """
-        af = cls._get_artifact(context, type_name, artifact_id)
+        af = self._show_artifact(context, type_name, artifact_id)
         action_name = 'artifact:set_location'
         policy.authorize(action_name, af.to_dict(), context)
-        af.validate_upload_allowed(af, field_name, blob_key)
 
         blob_name = "%s[%s]" % (field_name, blob_key)\
             if blob_key else field_name
 
-        blob = {'url': location, 'size': None, 'md5': None, 'sha1': None,
-                'sha256': None, 'status': glare_fields.BlobFieldType.ACTIVE,
+        blob = {'url': location, 'size': None, 'md5': blob_meta.pop("md5"),
+                'sha1': blob_meta.pop("sha1", None), 'id': str(uuid.uuid4()),
+                'sha256': blob_meta.pop("sha256", None), 'status': 'active',
                 'external': True, 'content_type': None}
-        md5 = blob_meta.pop("md5", None)
-        if md5 is None:
-            msg = (_("Incorrect blob metadata %(meta)s. MD5 must be specified "
-                     "for external location in artifact blob %(blob_name)."),
-                   {"meta": str(blob_meta), "blob_name": blob_name})
-            raise exception.BadRequest(msg)
-        else:
-            blob["md5"] = md5
-            blob["sha1"] = blob_meta.pop("sha1", None)
-            blob["sha256"] = blob_meta.pop("sha256", None)
-        modified_af = cls.update_blob(
-            context, type_name, artifact_id, blob, field_name, blob_key)
+
+        lock_key = "%s:%s" % (type_name, artifact_id)
+        with self.lock_engine.acquire(context, lock_key):
+            modified_af = self._init_blob(
+                context, af, blob, field_name, blob_key)
         LOG.info("External location %(location)s has been created "
                  "successfully for artifact %(artifact)s blob %(blob)s",
                  {'location': location, 'artifact': af.id,
@@ -274,8 +338,7 @@ class Engine(object):
         Notifier.notify(context, action_name, modified_af)
         return modified_af.to_dict()
 
-    @classmethod
-    def upload_blob(cls, context, type_name, artifact_id, field_name, fd,
+    def upload_blob(self, context, type_name, artifact_id, field_name, fd,
                     content_type, blob_key=None):
         """Upload Artifact blob.
 
@@ -290,23 +353,27 @@ class Engine(object):
         :return: dict representation of updated artifact
         """
         path = None
-        af = cls._get_artifact(context, type_name, artifact_id)
+        af = self._show_artifact(context, type_name, artifact_id)
         action_name = "artifact:upload"
         policy.authorize(action_name, af.to_dict(), context)
-        af.validate_upload_allowed(af, field_name, blob_key)
         try:
+            blob_name = "%s[%s]" % (field_name, blob_key) \
+                if blob_key else field_name
+            blob_id = str(uuid.uuid4())
             # create an an empty blob instance in db with 'saving' status
             blob = {'url': None, 'size': None, 'md5': None, 'sha1': None,
-                    'sha256': None,
-                    'status': glare_fields.BlobFieldType.SAVING,
+                    'sha256': None, 'id': blob_id,
+                    'status': 'saving',
                     'external': False, 'content_type': content_type}
-            modified_af = cls.update_blob(
-                context, type_name, artifact_id, blob, field_name, blob_key)
+            lock_key = "%s:%s" % (type_name, artifact_id)
+            with self.lock_engine.acquire(context, lock_key):
+                modified_af = self._init_blob(
+                    context, af, blob, field_name, blob_key)
 
-            if blob_key is None:
-                blob_id = getattr(modified_af, field_name)['id']
-            else:
-                blob_id = getattr(modified_af, field_name)[blob_key]['id']
+            LOG.debug("Parameters validation for artifact %(artifact)s blob "
+                      "upload passed for blob %(blob_name)s. "
+                      "Start blob uploading to backend.",
+                      {'artifact': af.id, 'blob_name': blob_name})
 
             # try to perform blob uploading to storage backend
             try:
@@ -331,19 +398,26 @@ class Engine(object):
                         del blob_dict_attr[blob_key]
                         af.update_blob(context, af.id,
                                        field_name, blob_dict_attr)
-            blob_name = "%s[%s]" % (field_name, blob_key) \
-                if blob_key else field_name
+
             LOG.info("Successfully finished blob upload for artifact "
                      "%(artifact)s blob field %(blob)s.",
                      {'artifact': af.id, 'blob': blob_name})
 
             # update blob info and activate it
             blob.update({'url': location_uri,
-                         'status': glare_fields.BlobFieldType.ACTIVE,
+                         'status': 'active',
                          'size': size})
             blob.update(checksums)
-            modified_af = cls.update_blob(
-                context, type_name, artifact_id, blob, field_name, blob_key)
+            lock_key = "%s:%s" % (type_name, artifact_id)
+            with self.lock_engine.acquire(context, lock_key):
+                af = af.show(context, artifact_id)
+                if blob_key:
+                    field_value = getattr(af, field_name)
+                    field_value[blob_key] = blob
+                else:
+                    field_value = blob
+                modified_af = af.update_blob(
+                    context, af.id, field_name, field_value)
 
             Notifier.notify(context, action_name, modified_af)
             return modified_af.to_dict()
@@ -351,36 +425,43 @@ class Engine(object):
             if path:
                 os.remove(path)
 
-    @classmethod
-    def update_blob(cls, context, type_name, artifact_id, blob,
-                    field_name, blob_key=None):
-        """Update blob info.
+    @staticmethod
+    def _init_blob(context, af, value, field_name, blob_key=None):
+        """Validate if given blob is ready for uploading.
 
-        :param context: user context
-        :param type_name: name of artifact type
-        :param artifact_id: id of the artifact to be updated
-        :param blob: blob representation in dict format
-        :param field_name: name of blob or blob dict field
-        :param blob_key: if field_name is blob dict it specifies key
-         in this dict
-
-        :return: dict representation of updated artifact
+        :param af: current artifact object
+        :param value: dict representation of the blob
+        :param field_name: blob or blob dict field name
+        :param blob_key: indicates key name if field_name is a blob dict
         """
-        lock_key = "%s:%s" % (type_name, artifact_id)
-        with base.BaseArtifact.lock_engine.acquire(context, lock_key):
-            af = cls._get_artifact(context, type_name, artifact_id)
-            if blob_key is None:
-                setattr(af, field_name, blob)
-                return af.update_blob(
-                    context, af.id, field_name, getattr(af, field_name))
-            else:
-                blob_dict_attr = getattr(af, field_name)
-                blob_dict_attr[blob_key] = blob
-                return af.update_blob(
-                    context, af.id, field_name, blob_dict_attr)
+        if blob_key:
+            if not af.is_blob_dict(field_name):
+                msg = _("%s is not a blob dict") % field_name
+                raise exception.BadRequest(msg)
+            field_value = getattr(af, field_name)
+            if field_value.get(blob_key) is not None:
+                msg = (_("Cannot re-upload blob value to blob dict %(blob)s "
+                         "with key %(key)s for artifact %(af)s") %
+                       {'blob': field_name, 'key': blob_key, 'af': af.id})
+                raise exception.Conflict(message=msg)
+            field_value[blob_key] = value
+            value = field_value
+        else:
+            if not af.is_blob(field_name):
+                msg = _("%s is not a blob") % field_name
+                raise exception.BadRequest(msg)
+            field_value = getattr(af, field_name, None)
+            if field_value is not None:
+                msg = _("Cannot re-upload blob %(blob)s for artifact "
+                        "%(af)s") % {'blob': field_name, 'af': af.id}
+                raise exception.Conflict(message=msg)
+        setattr(af, field_name, value)
+        af._enable_user_input_validation = False
 
-    @classmethod
-    def download_blob(cls, context, type_name, artifact_id, field_name,
+        return af.update_blob(
+            context, af.id, field_name, value)
+
+    def download_blob(self, context, type_name, artifact_id, field_name,
                       blob_key=None):
         """Download binary data from Glare Artifact.
 
@@ -392,8 +473,8 @@ class Engine(object):
          in this dict
         :return: file iterator for requested file
         """
-        af = cls._get_artifact(context, type_name, artifact_id,
-                               read_only=True)
+        af = self._show_artifact(context, type_name, artifact_id,
+                                 read_only=True)
         policy.authorize("artifact:download", af.to_dict(), context)
 
         blob_name = "%s[%s]" % (field_name, blob_key)\
@@ -407,12 +488,12 @@ class Engine(object):
             msg = _("%s is not a blob dict") % field_name
             raise exception.BadRequest(msg)
 
-        if af.status == af.STATUS.DEACTIVATED and not context.is_admin:
+        if af.status == 'deactivated' and not context.is_admin:
             msg = _("Only admin is allowed to download artifact data "
                     "when it's deactivated")
             raise exception.Forbidden(message=msg)
 
-        if af.status == af.STATUS.DELETED:
+        if af.status == 'deleted':
             msg = _("Cannot download data when artifact is deleted")
             raise exception.Forbidden(message=msg)
 
@@ -426,7 +507,7 @@ class Engine(object):
                 msg = _("Blob with name %s is not found") % blob_name
                 raise exception.NotFound(message=msg)
 
-        if blob is None or blob['status'] != glare_fields.BlobFieldType.ACTIVE:
+        if blob is None or blob['status'] != 'active':
             msg = _("%s is not ready for download") % blob_name
             raise exception.BadRequest(message=msg)
 
