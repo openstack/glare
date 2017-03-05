@@ -17,6 +17,7 @@
 from oslo_versionedobjects import fields
 
 from glare.common import exception as exc
+from glare.i18n import _
 from glare.objects.meta import fields as glare_fields
 from glare.objects.meta import validators as val_lib
 
@@ -103,8 +104,7 @@ class Field(object):
 
     @staticmethod
     def get_allowed_filter_ops(field):
-        if field in (fields.StringField, fields.String,
-                     glare_fields.ArtifactStatusField):
+        if field in (fields.StringField, fields.String):
             return [FILTER_EQ, FILTER_NEQ, FILTER_IN]
         elif field in (fields.IntegerField, fields.Integer, fields.FloatField,
                        fields.Float, glare_fields.VersionField):
@@ -122,7 +122,9 @@ class Field(object):
         if issubclass(self.field_class, fields.StringField):
             # check if fields is string
             if not any(isinstance(v, val_lib.MaxStrLen)
-                       for v in self.validators):
+                       for v in self.validators) and \
+                    not any(isinstance(v, val_lib.AllowedValues)
+                            for v in self.validators):
                 default.append(val_lib.MaxStrLen(255))
         return default
 
@@ -153,6 +155,13 @@ class Field(object):
                     if val is not None:
                         for check_func in vals:
                             check_func(val)
+                    if getattr(obj, '_enable_user_input_validation', False):
+                        if field == 'status':
+                            validate_status_transition(obj, val)
+                        elif field == 'visibility':
+                            validate_visibility_transition(obj, val)
+                        else:
+                            validate_change_allowed(obj, field)
                     return val
                 except (KeyError, ValueError, TypeError) as e:
                     msg = "Type: %s. Field: %s. Exception: %s" % (
@@ -255,6 +264,58 @@ class FolderField(DictField):
         self.max_folder_size = int(max_folder_size)
         self.field_props.append('max_blob_size')
         self.field_props.append('max_folder_size')
+
+
+def validate_status_transition(af, value):
+    if af.status == 'deleted':
+        msg = _("Cannot change status if artifact is deleted.")
+        raise exc.Forbidden(msg)
+    if value == 'active' and af.status == 'drafted':
+        for name, type_obj in af.fields.items():
+            if type_obj.required_on_activate and getattr(af, name) is None:
+                msg = _("'%s' field value must be set before "
+                        "activation.") % name
+                raise exc.Forbidden(msg)
+    elif value == 'drafted' and af.status != 'drafted':
+        msg = _("Cannot change status to 'drafted' from %s.") % af.status
+        raise exc.Forbidden(msg)
+    elif value == 'deactivated' and af.status not in ('active', 'deactivated'):
+        msg = _("Cannot deactivate artifact if it's not active.")
+        raise exc.Forbidden(msg)
+    elif value == 'deleted':
+        msg = _("Cannot delete artifact with PATCH requests. Use special "
+                "API to do this.")
+        raise exc.Forbidden(msg)
+
+
+def validate_visibility_transition(af, value):
+    if value == 'private':
+        try:
+            if af.visibility != 'private':
+                raise exc.Forbidden()
+        except NotImplementedError:
+            pass
+    elif value == 'public' and af.status != 'active':
+        msg = _("Cannot change visibility to 'public' if artifact"
+                " is not active.")
+        raise exc.Forbidden(msg)
+
+
+def validate_change_allowed(af, field_name):
+    """Validate if fields can be set for the artifact."""
+    af_status = af.status
+    if af_status not in ('active', 'drafted'):
+        msg = _("Forbidden to change fields "
+                "if artifact is not active or drafted.")
+        raise exc.Forbidden(message=msg)
+    if af.fields[field_name].system is True:
+        msg = _("Cannot specify system field %s. It is not "
+                "available for modifying by users.") % field_name
+        raise exc.Forbidden(msg)
+    if af_status == 'active' and not af.fields[field_name].mutable:
+        msg = (_("Forbidden to change field '%s' after activation.")
+               % field_name)
+        raise exc.Forbidden(message=msg)
 
 # Classes below added for backward compatibility. They shouldn't be used
 
