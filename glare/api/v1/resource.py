@@ -195,7 +195,7 @@ class ArtifactsController(api_versioning.VersionedResource):
         :param req: user request
         :return: list of json-schemas of all enabled artifact types.
         """
-        return self.engine.show_type_schemas(req.context)
+        return self.engine.list_type_schemas(req.context)
 
     @supported_versions(min_ver='1.0')
     @log_request_progress
@@ -206,8 +206,11 @@ class ArtifactsController(api_versioning.VersionedResource):
         :param type_name: artifact type name
         :return: json-schema representation of artifact type
         """
-        type_schema = self.engine.show_type_schemas(req.context, type_name)
-        return {type_name: type_schema}
+        type_schemas = self.engine.list_type_schemas(req.context)
+        if type_name not in type_schemas:
+            msg = _("Artifact type %s does not exist") % type_name
+            raise exc.NotFound(message=msg)
+        return {type_name: type_schemas[type_name]}
 
     @supported_versions(min_ver='1.0')
     @log_request_progress
