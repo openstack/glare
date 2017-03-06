@@ -39,14 +39,13 @@ if os.path.exists(os.path.join(possible_topdir, 'glare', '__init__.py')):
 import glance_store
 from oslo_config import cfg
 from oslo_log import log as logging
-import oslo_messaging
 import osprofiler.notifier
 import osprofiler.web
 
+from glare.api.middleware import context
 from glare.common import config
 from glare.common import exception
 from glare.common import wsgi
-from glare import notification
 
 
 CONF = cfg.CONF
@@ -70,15 +69,15 @@ def main():
         config.parse_args()
         wsgi.set_eventlet_hub()
         logging.setup(CONF, 'glare')
-        notification.set_defaults()
 
-        if cfg.CONF.profiler.enabled:
-            _notifier = osprofiler.notifier.create(
-                "Messaging", oslo_messaging, {}, notification.get_transport(),
-                "glare", "artifacts", cfg.CONF.bind_host)
-            osprofiler.notifier.set(_notifier)
-        else:
-            osprofiler.web.disable()
+        if CONF.profiler.enabled:
+            osprofiler.initializer.init_from_conf(
+                conf=CONF,
+                context={},
+                project="glare",
+                service="api",
+                host=CONF.bind_host
+            )
 
         server = wsgi.Server(initialize_glance_store=True)
         server.start(config.load_paste_app('glare-api'), default_port=9494)
