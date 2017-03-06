@@ -157,3 +157,12 @@ class TrustedAuthMiddleware(BaseContextMiddleware):
             req.context = RequestContext(read_only=True, is_admin=False)
         else:
             raise exception.Unauthorized()
+
+
+def get_admin_context(show_deleted=False):
+    """Create an administrator context."""
+    return RequestContext(auth_token=None,
+                          tenant=None,
+                          is_admin=True,
+                          show_deleted=show_deleted,
+                          overwrite=False)
