@@ -133,3 +133,12 @@ class TrustedAuthMiddleware(base_middleware.ConfigurableMiddleware):
         }
 
         req.context = context.RequestContext(**kwargs)
+
+
+def get_admin_context(show_deleted=False):
+    """Create an administrator context."""
+    return RequestContext(auth_token=None,
+                          tenant=None,
+                          is_admin=True,
+                          show_deleted=show_deleted,
+                          overwrite=False)
