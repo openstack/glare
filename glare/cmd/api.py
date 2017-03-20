@@ -84,8 +84,9 @@ def main():
         server.start(config.load_paste_app('glare-api'), default_port=9494)
         server.wait()
     except KNOWN_EXCEPTIONS as e:
-        fail(e)
+        raise e
 
 
 if __name__ == '__main__':
     main()
+
