@@ -13,6 +13,7 @@
 #    limitations under the License.
 
 import mock
+import requests
 import webob
 
 from glare.api.middleware import keycloak_auth
@@ -94,10 +95,7 @@ class TestKeycloakAuthMiddleware(base.BaseTestCase):
         token = {
             "iss": "http://localhost:8080/auth/realms/my_realm",
         }
-        mocked_resp = mock.Mock()
-        mocked_resp.status_code = 500
-        mocked_resp.json.return_value = '{"user": "mike"}'
-        mocked_get.return_value = mocked_resp
+        mocked_get.side_effect = requests.ConnectionError
 
         req = self._build_request(token)
         with mock.patch("jwt.decode", return_value=token):
