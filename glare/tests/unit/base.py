@@ -38,7 +38,6 @@ class BaseTestCase(testtools.TestCase):
     def setUp(self):
         super(BaseTestCase, self).setUp()
         self._config_fixture = self.useFixture(cfg_fixture.Config())
-        config.parse_args(args=[])
 
         self.users = {
             'user1': {
