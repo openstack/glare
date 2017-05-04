@@ -25,7 +25,6 @@ from oslo_policy import policy as os_policy
 import testtools
 
 from glare.api.middleware import context
-from glare.common import config
 from glare.common import policy
 from glare.common import wsgi
 from glare.db.sqlalchemy import api as db_api
@@ -38,7 +37,6 @@ class BaseTestCase(testtools.TestCase):
     def setUp(self):
         super(BaseTestCase, self).setUp()
         self._config_fixture = self.useFixture(cfg_fixture.Config())
-        config.parse_args(args=[])
 
         self.users = {
             'user1': {
