@@ -13,22 +13,22 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-from copy import deepcopy
 import uuid
+from copy import deepcopy
 
+import six
+import six.moves.urllib.request as urlrequest
 from oslo_config import cfg
 from oslo_log import log as logging
 from oslo_utils import timeutils
 from oslo_versionedobjects import base
 from oslo_versionedobjects import fields
-import six
-import six.moves.urllib.request as urlrequest
 
+from glare import locking
 from glare.common import exception
 from glare.common import store_api
 from glare.common import utils
 from glare.db import artifact_api
-from glare import locking
 from glare.i18n import _, _LI
 from glare.objects.meta import attribute
 from glare.objects.meta import fields as glare_fields
@@ -119,10 +119,13 @@ class BaseArtifact(base.VersionedObject):
                                           "information about an artifact."),
         'visibility': Field(fields.StringField, default='private',
                             nullable=False, sortable=True,
+                            validators=[validators.AllowedValues(
+                                ['private', 'public'])],
                             description="Artifact visibility that defines "
                                         "if artifact can be available to "
                                         "other users."),
-        'version': Field(glare_fields.VersionField, required_on_activate=False,
+        'version': Field(glare_fields.VersionField,
+                         required_on_activate=False,
                          default=DEFAULT_ARTIFACT_VERSION, nullable=False,
                          sortable=True, validators=[validators.Version()],
                          description="Artifact version(semver).")
