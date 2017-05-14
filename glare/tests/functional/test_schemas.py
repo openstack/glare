@@ -444,8 +444,7 @@ fixtures = {
             u'string_validators': {
                 u'enum': [u'aa',
                           u'bb',
-                          u'ccccccccccc',
-                          ],
+                          u'ccccccccccc', ],
                 u'filter_ops': [u'eq',
                                 u'neq',
                                 u'in'],
