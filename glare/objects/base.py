@@ -124,8 +124,7 @@ class BaseArtifact(base.VersionedObject):
                             description="Artifact visibility that defines "
                                         "if artifact can be available to "
                                         "other users."),
-        'version': Field(glare_fields.VersionField,
-                         required_on_activate=False,
+        'version': Field(glare_fields.VersionField, required_on_activate=False,
                          default=DEFAULT_ARTIFACT_VERSION, nullable=False,
                          sortable=True, validators=[validators.Version()],
                          description="Artifact version(semver).")
