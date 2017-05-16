@@ -329,7 +329,7 @@ class Engine(object):
                     if blob_key is None:
                         af.update_blob(context, af.id, field_name, None)
                     else:
-                        blob_dict_attr = modified_af[field_name]
+                        blob_dict_attr = getattr(modified_af, field_name)
                         del blob_dict_attr[blob_key]
                         af.update_blob(context, af.id,
                                        field_name, blob_dict_attr)
