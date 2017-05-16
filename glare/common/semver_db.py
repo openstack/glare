@@ -75,7 +75,7 @@ def _check_limit(value):
     if value > MAX_COMPONENT_LENGTH:
         reason = _("Version component is too "
                    "large (%d max)") % MAX_COMPONENT_LENGTH
-        raise exception.InvalidVersion(reason=reason)
+        raise exception.InvalidVersion(message=reason)
 
 
 def _version_to_long(version):
