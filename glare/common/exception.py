@@ -52,6 +52,11 @@ class InvalidStatusTransition(BadRequest):
     message = _("Transition status from %(orig)s to %(new)s was not valid")
 
 
+class InvalidVersion(GlareException):
+    def __init__(self, message=None, **kwargs):
+        super(InvalidVersion, self).__init__(kwargs['reason'])
+
+
 class NotAcceptable(GlareException):
     message = _("Not acceptable")
 
