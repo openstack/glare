@@ -70,17 +70,17 @@ class GlareFaultWrapperFilter(base_middleware.ConfigurableMiddleware):
     }
 
     def _map_exception_to_error(self, class_exception):
-        if class_exception == exception.GlareException:
+        if class_exception in (exception.GlareException, Exception):
             return webob.exc.HTTPInternalServerError
 
-        if class_exception.__name__ not in self.error_map:
+        if hasattr(class_exception, '__name__') and \
+                class_exception.__name__ not in self.error_map:
             return self._map_exception_to_error(class_exception.__base__)
 
         return self.error_map[class_exception.__name__]
 
     def _error(self, ex):
 
-        trace = None
         traceback_marker = 'Traceback (most recent call last)'
         webob_exc = None
 
@@ -100,9 +100,6 @@ class GlareFaultWrapperFilter(base_middleware.ConfigurableMiddleware):
         if isinstance(ex, exception.GlareException):
             message = ex.message
 
-        if cfg.CONF.debug and not trace:
-            trace = msg_trace
-
         if not webob_exc:
             webob_exc = self._map_exception_to_error(ex.__class__)
 
@@ -113,9 +110,11 @@ class GlareFaultWrapperFilter(base_middleware.ConfigurableMiddleware):
             'error': {
                 'message': message,
                 'type': ex_type,
-                'traceback': trace,
             }
         }
+
+        if cfg.CONF.debug:
+            error['error']['traceback'] = msg_trace
 
         # add microversion header is this is not acceptable request
         if isinstance(ex, exception.InvalidGlobalAPIVersion):
