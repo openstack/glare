@@ -13,7 +13,9 @@
 #    limitations under the License.
 
 from glare.common import exception as exc
+from glare.tests import sample_artifact
 from glare.tests.unit import base
+
 import random
 
 
@@ -350,17 +352,7 @@ class TestArtifactList(base.BaseTestArtifactAPI):
 
     def test_list_and_sort_fields(self):
         amount = 7
-        # Create a bunch of artifacts for list sorting tests
-        names = random.sample(["art%d" % i for i in range(amount)], amount)
-        floats = random.sample([0.01 * i for i in range(amount)], amount)
-        ints = random.sample([1 * i for i in range(amount)], amount)
-        strings = random.sample(["str%d" % i for i in range(amount)], amount)
-        versions = random.sample(["0.%d" % i for i in range(amount)], amount)
-        for i in range(amount):
-            val = {'name': names[i], 'float1': floats[i], 'int1': ints[i],
-                   'str1': strings[i], 'version': versions[i]}
-            self.controller.create(self.req, 'sample_artifact', val)
-
+        self.init_artifacts(amount)
         fields = ['name', 'id', 'visibility', 'version', 'float1', 'int1',
                   'str1']
 
@@ -373,3 +365,26 @@ class TestArtifactList(base.BaseTestArtifactAPI):
                 sorted_arts = sorted(arts, key=lambda x: x[sort_name],
                                      reverse=sort_dir == 'desc')
                 self.assertEqual(sorted_arts, arts)
+
+    def test_list_and_sort_negative(self):
+        amount = 7
+        self.init_artifacts(amount)
+        for name, field in sample_artifact.SampleArtifact.fields.items():
+            for sort_dir in ['asc', 'desc']:
+                if not field.sortable:
+                    self.assertRaises(
+                        exc.BadRequest, self.controller.list,
+                        self.req, 'sample_artifact',
+                        [], sort=[(field, sort_dir)])
+
+    def init_artifacts(self, amount):
+        # Create a bunch of artifacts for list sorting tests
+        names = random.sample(["art%d" % i for i in range(amount)], amount)
+        floats = random.sample([0.01 * i for i in range(amount)], amount)
+        ints = random.sample([1 * i for i in range(amount)], amount)
+        strings = random.sample(["str%d" % i for i in range(amount)], amount)
+        versions = random.sample(["0.%d" % i for i in range(amount)], amount)
+        for i in range(amount):
+            val = {'name': names[i], 'float1': floats[i], 'int1': ints[i],
+                   'str1': strings[i], 'version': versions[i]}
+            self.controller.create(self.req, 'sample_artifact', val)
