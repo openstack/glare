@@ -1,0 +1,73 @@
+# Copyright 2016 OpenStack Foundation.
+# All Rights Reserved.
+#
+#    Licensed under the Apache License, Version 2.0 (the "License"); you may
+#    not use this file except in compliance with the License. You may obtain
+#    a copy of the License at
+#
+#         http://www.apache.org/licenses/LICENSE-2.0
+#
+#    Unless required by applicable law or agreed to in writing, software
+#    distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+#    WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+#    License for the specific language governing permissions and limitations
+#    under the License.
+
+from glare.common import exception as exc
+from glare.tests.unit import base
+
+import glare.common.utils as utils
+
+
+class TestUtils(base.BaseTestCase):
+    """Test class for glare.common.utils"""
+
+    def test_validate_quotes(self):
+        self.assertIsNone(utils.validate_quotes('This is a good string'))
+
+    def test_validate_quotes_negative(self):
+        self.assertRaises(exc.InvalidParameterValue,
+                          utils.validate_quotes, ',bad string"')
+        self.assertRaises(exc.InvalidParameterValue, utils.validate_quotes,
+                          '"comma after quotation mark",')
+        self.assertRaises(exc.InvalidParameterValue,
+                          utils.validate_quotes, '"The quote is not closed')
+
+        self.assertIsNone(utils.validate_quotes("\\dir_structure"))
+
+    def test_evaluate_filter_op(self):
+        self.assertTrue(utils.evaluate_filter_op(2, 'gt', 1))
+        self.assertFalse(utils.evaluate_filter_op(1, 'gt', 2))
+
+        self.assertTrue(utils.evaluate_filter_op(2, 'gte', 1))
+        self.assertFalse(utils.evaluate_filter_op(1, 'gte', 2))
+        self.assertTrue(utils.evaluate_filter_op(1, 'gte', 1))
+
+        self.assertTrue(utils.evaluate_filter_op(1, 'lt', 2))
+        self.assertFalse(utils.evaluate_filter_op(2, 'lt', 1))
+
+        self.assertTrue(utils.evaluate_filter_op(1, 'lte', 2))
+        self.assertFalse(utils.evaluate_filter_op(2, 'lte', 1))
+        self.assertTrue(utils.evaluate_filter_op(1, 'lte', 1))
+
+        self.assertTrue(utils.evaluate_filter_op(2, 'neq', 1))
+        self.assertFalse(utils.evaluate_filter_op(1, 'neq', 1))
+
+        self.assertTrue(utils.evaluate_filter_op(1, 'eq', 1))
+        self.assertFalse(utils.evaluate_filter_op(2, 'eq', 1))
+
+        # check InvalidFilterOperatorValue exception for unknown operator
+        self.assertRaises(exc.InvalidFilterOperatorValue,
+                          utils.evaluate_filter_op, 1, 'unknown_operator', 1)
+
+
+class TestUtilsDictDiff(base.BaseTestCase):
+    """tests for utils.DictDiffer class"""
+    def test_str_repr(self):
+        past_dict = {"a": 1, "b": 2, "c": 3, "d": 4}
+        current_dic = {"b": 2, "c": 3, "d": "different value!", "e": "new!"}
+        dict_diff = utils.DictDiffer(current_dic, past_dict)
+        expected_dict_str = "\nResult output:\n\tAdded keys: " \
+                            "e\n\tRemoved keys:" \
+                            " a\n\tChanged keys: d\n\tUnchanged keys: c, b\n"
+        self.assertEqual(str(dict_diff), expected_dict_str)
