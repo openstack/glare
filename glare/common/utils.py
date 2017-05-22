@@ -455,7 +455,7 @@ def validate_quotes(value):
                             "before opening quotation mark.") % value
                     raise exception.InvalidParameterValue(message=msg)
             else:
-                if i + 1 != len(value) and value[i + 1] != ",":
+                if i + 1 != len(value) and value[i + 1] == ",":
                     msg = _("Invalid filter value %s. There is no comma "
                             "after closing quotation mark.") % value
                     raise exception.InvalidParameterValue(message=msg)
