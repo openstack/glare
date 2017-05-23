@@ -827,6 +827,11 @@ class BaseArtifact(base.VersionedObject):
         pass
 
     @classmethod
+    def validate_deletion(cls, context, af, values=None):
+        """Validation hook for deletion."""
+        pass
+
+    @classmethod
     def get_default_store(cls, context=None, af=None,
                           field_name=None, blob_key=None):
         """Return a default store type for artifact type."""
