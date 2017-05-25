@@ -1,0 +1,9 @@
+Code-Review+2: Mike Fedosin <mikhail.fedosin.ext@nokia.com>
+Code-Review+2: Idan Narotzki <idan.narotzki@nokia.com>
+Workflow+1: Idan Narotzki <idan.narotzki@nokia.com>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Thu, 25 May 2017 06:33:15 +0000
+Reviewed-on: https://review.openstack.org/466300
+Project: openstack/glare
+Branch: refs/heads/master
