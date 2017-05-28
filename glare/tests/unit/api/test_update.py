@@ -12,7 +12,10 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+from six import BytesIO
+
 from glare.common import exception as exc
+from glare.db import artifact_api
 from glare.tests.unit import base
 
 
@@ -41,10 +44,85 @@ class TestArtifactUpdate(base.BaseTestArtifactAPI):
         self.assertEqual({'tag1', 'tag2'}, set(res['tags']))
         self.assertEqual({'k': 'v'}, res['metadata'])
 
+    def test_update_replace_values(self):
+        changes = [
+            {'op': 'replace', 'path': '/int1', 'value': 1},
+            {'op': 'replace', 'path': '/float1', 'value': 1.0},
+            {'op': 'replace', 'path': '/str1', 'value': 'Test'},
+            {'op': 'replace', 'path': '/list_of_int', 'value': [0, 1]},
+            {'op': 'replace', 'path': '/dict_of_str', 'value': {'k': 'v'}},
+        ]
+        res = self.update_with_values(changes)
+        self.assertEqual(1, res['int1'])
+        self.assertEqual(1.0, res['float1'])
+        self.assertEqual('Test', res['str1'])
+        self.assertEqual([0, 1], res['list_of_int'])
+        self.assertEqual({'k': 'v'}, res['dict_of_str'])
+
+        changes = [
+            {'op': 'replace', 'path': '/int1', 'value': 2},
+            {'op': 'replace', 'path': '/float1', 'value': 2.0},
+            {'op': 'replace', 'path': '/str1', 'value': 'New_Test'},
+            {'op': 'replace', 'path': '/list_of_int/1', 'value': 4},
+            {'op': 'replace', 'path': '/dict_of_str/k', 'value': 'new_val'},
+        ]
+        res = self.update_with_values(changes)
+        self.assertEqual(2, res['int1'])
+        self.assertEqual(2.0, res['float1'])
+        self.assertEqual('New_Test', res['str1'])
+        self.assertEqual([0, 4], res['list_of_int'])
+        self.assertEqual({'k': 'new_val'}, res['dict_of_str'])
+
     def test_update_no_artifact_type(self):
         changes = [{'op': 'replace', 'path': '/name', 'value': 'new_name'}]
         self.update_with_values(
             changes, exc_class=exc.NotFound, art_type='wrong_type')
+
+    def test_update_name_version(self):
+        # Create additional artifacts
+        values = {'name': 'ttt', 'version': '2.0'}
+        self.controller.create(self.req, 'sample_artifact', values)
+        values = {'name': 'ddd', 'version': '1.0'}
+        self.controller.create(self.req, 'sample_artifact', values)
+
+        # This name/version is already taken
+        changes = [{'op': 'replace', 'path': '/version',
+                    'value': '2.0'}]
+        self.assertRaises(exc.Conflict, self.update_with_values, changes)
+        changes = [{'op': 'replace', 'path': '/name',
+                    'value': 'ddd'}]
+        self.assertRaises(exc.Conflict, self.update_with_values, changes)
+
+        # Test coercing
+        changes = [{'op': 'replace', 'path': '/name', 'value': True}]
+        res = self.update_with_values(changes)
+        self.assertEqual('True', res['name'])
+
+        changes = [{'op': 'replace', 'path': '/name', 'value': 1.0}]
+        res = self.update_with_values(changes)
+        self.assertEqual('1.0', res['name'])
+
+        changes = [{'op': 'replace', 'path': '/version', 'value': 2.0}]
+        res = self.update_with_values(changes)
+        self.assertEqual('2.0.0', res['version'])
+
+    def test_update_deleted_artifact(self):
+        # Enable delayed delete
+        self.config(delayed_delete=True)
+        # Delete artifact and check its status
+        self.controller.delete(self.req, 'sample_artifact',
+                               self.sample_artifact['id'])
+        art = self.controller.show(self.req, 'sample_artifact',
+                                   self.sample_artifact['id'])
+        self.assertEqual('deleted', art['status'])
+
+        changes = [{'op': 'replace', 'path': '/int1',
+                    'value': 1}]
+        self.assertRaises(exc.Forbidden, self.update_with_values, changes)
+
+        changes = [{'op': 'replace', 'path': '/name',
+                    'value': 'new'}]
+        self.assertRaises(exc.Forbidden, self.update_with_values, changes)
 
     def test_update_lists(self):
         changes = [{'op': 'replace', 'path': '/list_of_str',
@@ -82,6 +160,10 @@ class TestArtifactUpdate(base.BaseTestArtifactAPI):
 
         changes = [{'op': 'replace', 'path': '/list_of_str',
                     'value': [['a']]}]
+        self.update_with_values(changes, exc_class=exc.BadRequest)
+
+        changes = [{'op': 'remove', 'path': '/list_of_str/-',
+                    'value': 'val3'}]
         self.update_with_values(changes, exc_class=exc.BadRequest)
 
     def test_update_dicts(self):
@@ -174,11 +256,24 @@ class TestArtifactUpdate(base.BaseTestArtifactAPI):
                     'value': {('a' + str(i)): 'a' for i in range(256)}}]
         self.update_with_values(changes, exc_class=exc.BadRequest)
 
+        changes = [{'op': 'replace', 'path': '/int1', 'value': 'aaa'}]
+        self.update_with_values(changes, exc_class=exc.BadRequest)
+
+        changes = [{'op': 'replace', 'path': '/float1', 'value': 'aaa'}]
+        self.update_with_values(changes, exc_class=exc.BadRequest)
+
     def test_update_artifact_not_existing_field(self):
         changes = [{'op': 'replace', 'path': '/wrong_field', 'value': 'a'}]
         self.update_with_values(changes, exc_class=exc.BadRequest)
 
         changes = [{'op': 'replace', 'path': '/', 'value': 'a'}]
+        self.update_with_values(changes, exc_class=exc.BadRequest)
+
+    def test_update_artifact_remove_field(self):
+        changes = [{'op': 'remove', 'path': '/name'}]
+        self.update_with_values(changes, exc_class=exc.BadRequest)
+
+        changes = [{'op': 'remove', 'path': '/list_of_int/10'}]
         self.update_with_values(changes, exc_class=exc.BadRequest)
 
     def test_update_artifact_blob(self):
@@ -264,11 +359,50 @@ class TestArtifactUpdate(base.BaseTestArtifactAPI):
                     'value': None}]
         self.update_with_values(changes, exc_class=exc.BadRequest)
 
+        changes = [{'op': 'replace', 'path': '/status',
+                    'value': 'deactivated'}]
+        self.update_with_values(changes, exc_class=exc.BadRequest)
+
         changes = [{'op': 'replace', 'path': '/string_required',
                     'value': 'some_string'}]
         res = self.update_with_values(changes)
         self.assertEqual('some_string', res['string_required'])
 
+        changes = [
+            {'op': 'replace', 'path': '/name', 'value': 'new_name'},
+            {'op': 'replace', 'path': '/status', 'value': 'active'}
+        ]
+        self.update_with_values(changes, exc_class=exc.BadRequest)
+
+        # It's impossible to activate the artifact when it has 'saving' blobs
+        self.controller.upload_blob(
+            self.req, 'sample_artifact', self.sample_artifact['id'], 'blob',
+            BytesIO(b'aaa'), 'application/octet-stream')
+        self.sample_artifact = self.controller.show(
+            self.req, 'sample_artifact', self.sample_artifact['id'])
+
+        # Change status of the blob to 'saving'
+        self.sample_artifact['blob']['status'] = 'saving'
+        artifact_api.ArtifactAPI().update_blob(
+            self.req.context, self.sample_artifact['id'],
+            {'blob': self.sample_artifact['blob']})
+        self.sample_artifact = self.controller.show(
+            self.req, 'sample_artifact', self.sample_artifact['id'])
+        self.assertEqual('saving', self.sample_artifact['blob']['status'])
+
+        # Now activating of the artifact leads to Conflict
+        changes = [{'op': 'replace', 'path': '/status', 'value': 'active'}]
+        self.assertRaises(exc.Conflict, self.update_with_values, changes)
+
+        # Reverting status of the blob to active again
+        self.sample_artifact['blob']['status'] = 'active'
+        artifact_api.ArtifactAPI().update_blob(
+            self.req.context, self.sample_artifact['id'],
+            {'blob': self.sample_artifact['blob']})
+        self.sample_artifact = self.controller.show(
+            self.req, 'sample_artifact', self.sample_artifact['id'])
+        self.assertEqual('active', self.sample_artifact['blob']['status'])
+
         changes = [{'op': 'replace', 'path': '/status', 'value': 'active'}]
         res = self.update_with_values(changes)
         self.assertEqual('active', res['status'])
@@ -276,6 +410,12 @@ class TestArtifactUpdate(base.BaseTestArtifactAPI):
         changes = [{'op': 'replace', 'path': '/status', 'value': 'active'}]
         res = self.update_with_values(changes)
         self.assertEqual('active', res['status'])
+
+        changes = [
+            {'op': 'replace', 'path': '/string_mutable', 'value': 'str'},
+            {'op': 'replace', 'path': '/status', 'value': 'deactivated'}
+        ]
+        self.update_with_values(changes, exc_class=exc.BadRequest)
 
         changes = [{'op': 'replace', 'path': '/status',
                     'value': 'deactivated'}]
@@ -286,6 +426,12 @@ class TestArtifactUpdate(base.BaseTestArtifactAPI):
                     'value': 'deactivated'}]
         res = self.update_with_values(changes)
         self.assertEqual('deactivated', res['status'])
+
+        changes = [
+            {'op': 'replace', 'path': '/name', 'value': 'new_name'},
+            {'op': 'replace', 'path': '/status', 'value': 'active'}
+        ]
+        self.update_with_values(changes, exc_class=exc.BadRequest)
 
         changes = [{'op': 'replace', 'path': '/status', 'value': 'active'}]
         res = self.update_with_values(changes)
@@ -294,6 +440,19 @@ class TestArtifactUpdate(base.BaseTestArtifactAPI):
         changes = [{'op': 'replace', 'path': '/status',
                     'value': None}]
         self.update_with_values(changes, exc_class=exc.BadRequest)
+
+        # Enable delayed delete
+        self.config(delayed_delete=True)
+        # Delete artifact and check its status
+        self.controller.delete(self.req, 'sample_artifact',
+                               self.sample_artifact['id'])
+        art = self.controller.show(self.req, 'sample_artifact',
+                                   self.sample_artifact['id'])
+        self.assertEqual('deleted', art['status'])
+
+        changes = [{'op': 'replace', 'path': '/status', 'value': 'active'}]
+        self.assertRaises(exc.InvalidStatusTransition,
+                          self.update_with_values, changes)
 
     def test_update_artifact_mutable_fields(self):
         changes = [{'op': 'replace', 'path': '/string_required',
