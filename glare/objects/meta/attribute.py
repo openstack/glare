@@ -12,8 +12,6 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-import six
-
 from oslo_versionedobjects import fields
 
 from glare.common import exception as exc
@@ -110,7 +108,7 @@ class Attribute(object):
         # setup custom field attrs
         field_attrs = {attr_name: getattr(self, attr_name)
                        for attr_name in self.field_attrs}
-        for prop, value in six.iteritems(field_attrs):
+        for prop, value in field_attrs.items():
                 setattr(field, prop, value)
 
         # apply custom validators
