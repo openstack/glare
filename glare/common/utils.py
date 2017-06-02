@@ -40,7 +40,7 @@ from oslo_versionedobjects import fields
 import six
 
 from glare.common import exception
-from glare.i18n import _, _LE, _LW
+from glare.i18n import _
 from glare.objects.meta import fields as glare_fields
 
 CONF = cfg.CONF
@@ -86,7 +86,7 @@ def cooperative_iter(iter):
             yield chunk
     except Exception as err:
         with excutils.save_and_reraise_exception():
-            msg = _LE("Error: cooperative_iter exception %s") % err
+            msg = "Error: cooperative_iter exception %s" % err
             LOG.error(msg)
 
 
@@ -265,8 +265,8 @@ def validate_key_cert(key_file, cert_file):
         data = encodeutils.to_utf8(data)
         digest = CONF.digest_algorithm
         if digest == 'sha1':
-            LOG.warning(
-                _LW('The FIPS (FEDERAL INFORMATION PROCESSING STANDARDS)'
+            LOG.warning((
+                    'The FIPS (FEDERAL INFORMATION PROCESSING STANDARDS)'
                     ' state that the SHA-1 is not suitable for'
                     ' general-purpose digital signature applications (as'
                     ' specified in FIPS 186-3) that require 112 bits of'
