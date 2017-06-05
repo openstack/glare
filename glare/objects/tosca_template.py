@@ -16,11 +16,11 @@
 from oslo_versionedobjects import fields
 
 from glare.objects import base
-from glare.objects.meta import attribute
+from glare.objects.meta import wrappers
 
 
-Field = attribute.Attribute.init
-Blob = attribute.BlobAttribute.init
+Field = wrappers.Attribute.init
+Blob = wrappers.BlobAttribute.init
 
 
 class TOSCATemplate(base.BaseArtifact):

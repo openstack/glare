@@ -16,15 +16,14 @@
 from oslo_versionedobjects import fields
 
 from glare.objects import base
-from glare.objects.meta import attribute
 from glare.objects.meta import fields as glare_fields
 from glare.objects.meta import validators
+from glare.objects.meta import wrappers
 
-
-Field = attribute.Attribute.init
-Blob = attribute.BlobAttribute.init
-List = attribute.ListAttribute.init
-Dict = attribute.DictAttribute.init
+Field = wrappers.Attribute.init
+Blob = wrappers.BlobAttribute.init
+List = wrappers.ListAttribute.init
+Dict = wrappers.DictAttribute.init
 
 
 class MuranoPackage(base.BaseArtifact):

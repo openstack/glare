@@ -16,14 +16,13 @@
 from oslo_versionedobjects import fields
 
 from glare.objects import base
-from glare.objects.meta import attribute
 from glare.objects.meta import fields as glare_fields
+from glare.objects.meta import wrappers
 
-
-Field = attribute.Attribute.init
-Blob = attribute.BlobAttribute.init
-Dict = attribute.DictAttribute.init
-BlobDict = attribute.BlobDictAttribute.init
+Field = wrappers.Attribute.init
+Blob = wrappers.BlobAttribute.init
+Dict = wrappers.DictAttribute.init
+BlobDict = wrappers.BlobDictAttribute.init
 
 
 class HeatTemplate(base.BaseArtifact):
