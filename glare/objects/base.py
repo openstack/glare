@@ -921,7 +921,7 @@ class BaseArtifact(base.VersionedObject):
             element_type = (utils.get_schema_type(field.element_type)
                             if hasattr(field, 'element_type')
                             else 'string')
-
+            property_validators = schema.pop('propertyValidators', [])
             if field.element_type is glare_fields.BlobFieldType:
                 schema['additionalProperties'] = output_blob_schema
             else:
@@ -933,16 +933,23 @@ class BaseArtifact(base.VersionedObject):
                             'type': (element_type
                                      if key in required
                                      else [element_type, 'null'])}
+                        for val in property_validators:
+                            properties[key].update(val)
                     schema['properties'] = properties
                     schema['additionalProperties'] = False
                 else:
                     schema['additionalProperties'] = {'type': element_type}
+                    for val in property_validators:
+                        schema['additionalProperties'].update(val)
 
-        if field_type == 'array':
+        if isinstance(field, glare_fields.List):
+            items_validators = schema.pop('itemValidators', [])
             schema['items'] = {
                 'type': (utils.get_schema_type(field.element_type)
                          if hasattr(field, 'element_type')
                          else 'string')}
+            for val in items_validators:
+                schema['items'].update(val)
 
         if isinstance(field, glare_fields.BlobField):
             schema.update(output_blob_schema)
