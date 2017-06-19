@@ -27,6 +27,7 @@ down_revision = '002'
 
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy.dialects import mysql
 
 MYSQL_ENGINE = 'InnoDB'
 MYSQL_CHARSET = 'utf8'
@@ -36,7 +37,10 @@ def upgrade():
     op.create_table(
         'glare_blob_data',
         sa.Column('id', sa.String(255), primary_key=True, nullable=False),
-        sa.Column('data', sa.LargeBinary(), nullable=False),
+        sa.Column(
+            'data',
+            sa.LargeBinary().with_variant(mysql.LONGBLOB(), 'mysql'),
+            nullable=False),
         sa.PrimaryKeyConstraint('id'),
         mysql_engine=MYSQL_ENGINE,
         mysql_charset=MYSQL_CHARSET
