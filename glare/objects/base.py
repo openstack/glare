@@ -34,15 +34,15 @@ from glare.objects.meta import fields as glare_fields
 from glare.objects.meta import validators
 from glare.objects.meta import wrappers
 
-artifact_opts = [
+global_artifact_opts = [
     cfg.BoolOpt('delayed_delete', default=False,
-                help=_("Defines if artifact must be deleted immediately "
-                       "or just marked as deleted so it can be cleaned "
+                help=_("Defines if artifacts must be deleted immediately "
+                       "or just marked as deleted so they can be scrubbed "
                        "by some other tool in the background.")),
 ]
 
 CONF = cfg.CONF
-CONF.register_opts(artifact_opts)
+CONF.register_opts(global_artifact_opts)
 
 LOG = logging.getLogger(__name__)
 
@@ -129,6 +129,23 @@ class BaseArtifact(base.VersionedObject):
                          sortable=True, validators=[validators.Version()],
                          description="Artifact version(semver).")
     }
+
+    artifact_type_opts = [
+        cfg.BoolOpt('delayed_delete',
+                    help=_("Defines if artifact of this type must be deleted "
+                           "immediately or just marked as deleted so it can "
+                           "be scrubbed by some other tool in the background. "
+                           "Redefines global parameter of the same name "
+                           "from [DEFAULT] section.")),
+    ]
+
+    def __new__(cls, *args, **kwargs):
+        CONF.register_opts(cls.artifact_type_opts, group=cls.get_type_name())
+        return base.VersionedObject.__new__(cls)
+
+    @classmethod
+    def list_artifact_type_opts(cls):
+        return cls.artifact_type_opts
 
     db_api = artifact_api.ArtifactAPI()
     lock_engine = locking.LockEngine(artifact_api.ArtifactLockApi())
@@ -626,7 +643,12 @@ class BaseArtifact(base.VersionedObject):
         LOG.debug("Marked artifact %(artifact)s as deleted.",
                   {'artifact': af.id})
 
-        if not CONF.delayed_delete:
+        delayed_delete = getattr(CONF, cls.get_type_name()).delayed_delete
+        # use global parameter if delayed delete isn't set per artifact type
+        if delayed_delete is None:
+            delayed_delete = CONF.delayed_delete
+
+        if not delayed_delete:
             if blobs:
                 # delete blobs one by one
                 cls._delete_blobs(blobs, context, af)

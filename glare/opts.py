@@ -29,7 +29,7 @@ import glare.common.config
 import glare.common.wsgi
 import glare.notification
 import glare.objects.base
-import glare.objects.meta.registry
+from glare.objects.meta import registry
 
 _artifacts_opts = [
     (None, list(itertools.chain(
@@ -41,12 +41,17 @@ _artifacts_opts = [
         glare.common.wsgi.eventlet_opts,
         glare.common.wsgi.socket_opts,
         glare.notification.notifier_opts,
-        glare.objects.base.artifact_opts,
-        glare.objects.meta.registry.registry_options))),
+        glare.objects.base.global_artifact_opts,
+        registry.registry_options))),
     profiler.list_opts()[0],
     ('paste_deploy', glare.common.config.paste_deploy_opts),
     ('keycloak_oidc', glare.api.middleware.keycloak_auth.keycloak_oidc_opts)
 ]
+
+registry.ArtifactRegistry.register_all_artifacts()
+for af_type in registry.ArtifactRegistry.obj_classes().values():
+    _artifacts_opts.append(
+        (af_type[0].get_type_name(), af_type[0].list_artifact_type_opts()))
 
 
 def list_artifacts_opts():
