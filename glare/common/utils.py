@@ -200,7 +200,10 @@ class LimitingReader(object):
             self.sha1.update(res)
             self.sha256.update(res)
         if self.bytes_read > self.limit:
-            raise exception.RequestEntityTooLarge()
+            message = "The server is refusing to process a request because the"
+            "request entity with size of %(blob_length)s bytes,is larger than"
+            "the server is willing or able to process - %(limit)s bytes."
+            raise exception.RequestEntityTooLarge(message=message)
         return res
 
 
