@@ -134,8 +134,9 @@ class PreconditionFailed(GlareException):
 
 class RequestEntityTooLarge(GlareException):
     message = _("The server is refusing to process a request because the "
-                "request entity is larger than the server is willing or "
-                "able to process.")
+                "request entity with size of %(blob_length)s bytes,"
+                " is larger than the server is willing or "
+                "able to process - %(limit)s bytes.")
 
 
 class RequestRangeNotSatisfiable(GlareException):
