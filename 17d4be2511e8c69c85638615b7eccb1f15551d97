@@ -1,0 +1,8 @@
+Code-Review+2: Mike Fedosin <mikhail.fedosin.ext@nokia.com>
+Workflow+1: Mike Fedosin <mikhail.fedosin.ext@nokia.com>
+Verified+2: Jenkins
+Submitted-by: Jenkins
+Submitted-at: Tue, 27 Jun 2017 10:55:32 +0000
+Reviewed-on: https://review.openstack.org/477851
+Project: openstack/glare
+Branch: refs/heads/stable/ocata
