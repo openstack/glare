@@ -239,7 +239,7 @@ class ArtifactsController(api_versioning.VersionedResource):
         :param patch: json patch with artifact changes
         :return: definition of updated artifact
         """
-        return self.engine.update(req.context, type_name, artifact_id, patch)
+        return self.engine.save(req.context, type_name, artifact_id, patch)
 
     @supported_versions(min_ver='1.0')
     @log_request_progress
@@ -262,7 +262,7 @@ class ArtifactsController(api_versioning.VersionedResource):
         :param artifact_id: id of artifact to show
         :return: definition of requested artifact
         """
-        return self.engine.get(req.context, type_name, artifact_id)
+        return self.engine.show(req.context, type_name, artifact_id)
 
     @supported_versions(min_ver='1.0')
     @log_request_progress

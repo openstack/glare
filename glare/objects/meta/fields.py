@@ -12,32 +12,16 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-import uuid
-
 import jsonschema
 from jsonschema import exceptions as json_exceptions
 from oslo_versionedobjects import fields
 import semantic_version
 import six
 import six.moves.urllib.parse as urlparse
+import six.moves.urllib.request as urlrequest
 
+from glare.common import exception
 from glare.i18n import _
-
-
-class ArtifactStatusField(fields.StateMachine):
-    ARTIFACT_STATUS = (DRAFTED, ACTIVE, DEACTIVATED, DELETED) = (
-        'drafted', 'active', 'deactivated', 'deleted')
-
-    ALLOWED_TRANSITIONS = {
-        DRAFTED: {DRAFTED, ACTIVE, DELETED},
-        ACTIVE: {ACTIVE, DEACTIVATED, DELETED},
-        DEACTIVATED: {DEACTIVATED, ACTIVE, DELETED},
-        DELETED: {DELETED}
-    }
-
-    def __init__(self, **kwargs):
-            super(ArtifactStatusField, self).__init__(self.ARTIFACT_STATUS,
-                                                      **kwargs)
 
 
 class Version(fields.FieldType):
@@ -81,7 +65,6 @@ class BlobFieldType(fields.FieldType):
         if not isinstance(value, dict):
             raise ValueError(_("Blob value must be dict. Got %s type instead")
                              % type(value))
-        value.setdefault('id', str(uuid.uuid4()))
         try:
             jsonschema.validate(value, BlobFieldType.BLOB_SCHEMA)
         except json_exceptions.ValidationError as e:
@@ -150,6 +133,17 @@ class LinkFieldType(fields.FieldType):
             if link.scheme not in ('http', 'https'):
                 raise ValueError(_('Only http and https requests '
                                    'are allowed in url %s') % value)
+            try:
+                with urlrequest.urlopen(value) as data:
+                    data.read(1)
+            except Exception:
+                raise ValueError(
+                    _('Link %(link)s is not valid in field '
+                      '%(field)s. The link must be either valid url or '
+                      'reference to artifact. Example: '
+                      'http://glarehost:9494/artifacts/<artifact_type>/'
+                      '<artifact_id>'
+                      ) % {'link': value, 'field': field})
         else:
             result = value.split('/')
             if len(result) != 4 or result[1] != 'artifacts':
@@ -159,6 +153,11 @@ class LinkFieldType(fields.FieldType):
                       'reference to artifact. Example: '
                       '/artifacts/<artifact_type>/<artifact_id>'
                       ) % {'link': value, 'field': field})
+            filters = [('id', None, 'eq', None, value.split('/')[3])]
+            if len(obj.db_api.list(
+                    obj.obj_context, filters, None, 1, [], False)) == 0:
+                raise exception.BadRequest
+
         return value
 
 
