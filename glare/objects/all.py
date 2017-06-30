@@ -35,31 +35,7 @@ class All(base.BaseArtifact):
         raise exception.Forbidden("This type is read only.")
 
     @classmethod
-    def update(cls, context, af, values):
-        raise exception.Forbidden("This type is read only.")
-
-    @classmethod
-    def get_action_for_updates(cls, context, artifact, updates):
-        raise exception.Forbidden("This type is read only.")
-
-    @classmethod
-    def delete(cls, context, af):
-        raise exception.Forbidden("This type is read only.")
-
-    @classmethod
-    def activate(cls, context, af, values):
-        raise exception.Forbidden("This type is read only.")
-
-    @classmethod
-    def reactivate(cls, context, af, values):
-        raise exception.Forbidden("This type is read only.")
-
-    @classmethod
-    def deactivate(cls, context, af, values):
-        raise exception.Forbidden("This type is read only.")
-
-    @classmethod
-    def publish(cls, context, af, values):
+    def update_artifact(cls, context, af_id, values):
         raise exception.Forbidden("This type is read only.")
 
     @classmethod
