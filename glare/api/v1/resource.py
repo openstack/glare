@@ -156,6 +156,10 @@ class RequestDeserializer(api_versioning.VersionedResource,
                 msg = _("url is required when specifying external location. "
                         "Cannot find 'url' in request body: %s") % str(data)
                 raise exc.BadRequest(msg)
+            if 'md5' not in data:
+                msg = _("Incorrect blob metadata. MD5 must be specified "
+                        "for external location in artifact blob.")
+                raise exc.BadRequest(msg)
         else:
             data = req.body_file
 
@@ -226,6 +230,13 @@ class ArtifactsController(api_versioning.VersionedResource):
         if req.context.tenant is None or req.context.read_only:
             msg = _("It's forbidden to anonymous users to create artifacts.")
             raise exc.Forbidden(msg)
+        if not values.get('name'):
+            msg = _("Name must be specified at creation.")
+            raise exc.BadRequest(msg)
+        for field in ('visibility', 'status'):
+            if field in values:
+                msg = _("%s is not allowed in a request at creation.") % field
+                raise exc.BadRequest(msg)
         return self.engine.create(req.context, type_name, values)
 
     @supported_versions(min_ver='1.0')
@@ -239,7 +250,7 @@ class ArtifactsController(api_versioning.VersionedResource):
         :param patch: json patch with artifact changes
         :return: definition of updated artifact
         """
-        return self.engine.update(req.context, type_name, artifact_id, patch)
+        return self.engine.save(req.context, type_name, artifact_id, patch)
 
     @supported_versions(min_ver='1.0')
     @log_request_progress
@@ -262,7 +273,7 @@ class ArtifactsController(api_versioning.VersionedResource):
         :param artifact_id: id of artifact to show
         :return: definition of requested artifact
         """
-        return self.engine.get(req.context, type_name, artifact_id)
+        return self.engine.show(req.context, type_name, artifact_id)
 
     @supported_versions(min_ver='1.0')
     @log_request_progress
