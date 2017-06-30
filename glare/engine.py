@@ -13,12 +13,15 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+import copy
 import os
+import uuid
 
 import jsonpatch
 from oslo_config import cfg
 from oslo_log import log as logging
 from oslo_utils import excutils
+import semantic_version
 import six
 
 from glare.common import exception
@@ -66,17 +69,26 @@ class Engine(object):
 
     lock_engine = locking.LockEngine(artifact_api.ArtifactLockApi())
 
+    @utils.no_4byte_params
     def _create_scoped_lock(self, context, type_name, name, version,
                             owner, visibility='private'):
         """Create scoped lock for artifact."""
-        name = str(name) if not isinstance(name, six.string_types) else name
-        # TODO(mfedosin): add more sophisticated coercion for version
-        version = str(version) \
-            if not isinstance(version, six.string_types) else version
-
         if not name or not version:
             msg = _("Name and version must be set for artifact.")
             raise exception.BadRequest(msg)
+
+        try:
+            name = str(name) if not isinstance(
+                name, six.string_types) else name
+            if len(name) > 255:
+                msg = _("Too long artifact name. Should be less than 256 "
+                        "characters.")
+                raise exception.BadRequest(msg)
+            version = str(version) if not isinstance(
+                version, six.string_types) else version
+            version = str(semantic_version.Version.coerce(version))
+        except ValueError as e:
+            raise exception.BadRequest(message=str(e))
 
         # validate that artifact doesn't exist for the scope
         filters = [('name', 'eq:' + name), ('version', 'eq:' + version)]
@@ -103,7 +115,7 @@ class Engine(object):
         return lock
 
     @staticmethod
-    def _get_artifact(ctx, type_name, artifact_id, read_only=False):
+    def _show_artifact(ctx, type_name, artifact_id, read_only=False):
         """Return artifact requested by user.
 
         Check access permissions and policies.
@@ -116,7 +128,7 @@ class Engine(object):
         """
         artifact_type = registry.ArtifactRegistry.get_artifact_type(type_name)
         # only artifact is available for class users
-        af = artifact_type.get(ctx, artifact_id)
+        af = artifact_type.show(ctx, artifact_id)
         if not read_only:
             if not ctx.is_admin and ctx.tenant != af.owner or ctx.read_only:
                 raise exception.Forbidden()
@@ -165,6 +177,59 @@ class Engine(object):
             # return artifact to the user
             return af.to_dict()
 
+    def _apply_patch(self, context, af, patch):
+        # This function is a collection of hacks and workarounds to make
+        # json patch apply changes to oslo_vo object.
+        updates = {}
+        action_names = ['artifact:update']
+        try:
+            for operation in patch._ops:
+                # format of location is "/key/value" or just "/key"
+                # first case symbolizes that we have dict or list insertion,
+                # second, that we work with a field itself.
+                items = operation.location.split('/', 2)
+                field_name = items[1]
+                if af.is_blob(field_name) or af.is_blob_dict(field_name):
+                    msg = _("Cannot add blob with this request. "
+                            "Use special Blob API for that.")
+                    raise exception.BadRequest(msg)
+                if af[field_name] is not None and len(items) > 2:
+                    old_value = copy.copy(af[field_name])
+                else:
+                    old_value = af[field_name]
+                # work with hooks and define action names
+                if field_name == 'visibility':
+                    af.validate_publish(context, af)
+                    action_names.append('artifact:publish')
+                elif field_name == 'visibility':
+                    if operation.operation['value'] == 'deactivated':
+                        action_names.append('artifact:deactivate')
+                    elif operation.operation['value'] == 'active':
+                        if af.status == 'deactivated':
+                            action_names.append('artifact:reactivate')
+                        else:
+                            af.validate_activate(context, af)
+                            action_names.append('artifact:activate')
+
+                af = operation.apply(af)
+                # The trickiest part, because oslo_vo doesn't start coercing
+                # if there was a modification of collection. It works with
+                # direct assignments only.
+                # For example:
+                #     my_list.append(elem) <- coercing doesn't work
+                #     my_list = [elem1, elem2] <- coercing works
+                if len(items) > 2:
+                    af[field_name] = af[field_name]
+                if old_value != af[field_name]:
+                    updates[field_name] = af[field_name]
+        except (jsonpatch.JsonPatchException,
+                jsonpatch.JsonPointerException,
+                KeyError, TypeError, AttributeError,
+                ValueError) as e:
+            raise exception.BadRequest(message=str(e))
+
+        return updates, action_names
+
     def update(self, context, type_name, artifact_id, patch):
         """Update artifact with json patch.
 
@@ -178,49 +243,21 @@ class Engine(object):
         :param patch: json patch object
         :return: dict representation of updated artifact
         """
-
-        def _get_updates(af_dict, patch_with_upd):
-            """Get updated values for artifact and json patch.
-
-            :param af_dict: current artifact definition as dict
-            :param patch_with_upd: json-patch object
-            :return: dict of updated attributes and their values
-            """
-            try:
-                af_dict_patched = patch_with_upd.apply(af_dict)
-                diff = utils.DictDiffer(af_dict_patched, af_dict)
-
-                # we mustn't add or remove attributes from artifact
-                if diff.added() or diff.removed():
-                    msg = _(
-                        "Forbidden to add or remove attributes from artifact. "
-                        "Added attributes %(added)s. "
-                        "Removed attributes %(removed)s") % {
-                        'added': diff.added(), 'removed': diff.removed()
-                    }
-                    raise exception.BadRequest(message=msg)
-
-                return {k: af_dict_patched[k] for k in diff.changed()}
-
-            except (jsonpatch.JsonPatchException,
-                    jsonpatch.JsonPointerException,
-                    KeyError) as e:
-                raise exception.BadRequest(message=str(e))
-            except TypeError as e:
-                msg = _("Incorrect type of the element. Reason: %s") % str(e)
-                raise exception.BadRequest(msg)
         lock_key = "%s:%s" % (type_name, artifact_id)
         with self.lock_engine.acquire(context, lock_key):
-            af = self._get_artifact(context, type_name, artifact_id)
-            af_dict = af.to_dict()
-            updates = _get_updates(af_dict, patch)
+            af = self._show_artifact(context, type_name, artifact_id)
+            # enable additional checks to validate user input.
+            af._user_input = True
+
+            updates, action_names = self._apply_patch(context, af, patch)
+
             LOG.debug("Update diff successfully calculated for artifact "
                       "%(af)s %(diff)s", {'af': artifact_id, 'diff': updates})
             if not updates:
-                return af_dict
-            action = af.get_action_for_updates(context, af, updates)
-            action_name = "artifact:%s" % action.__name__
-            policy.authorize(action_name, af_dict, context)
+                return af.to_dict()
+
+            for action_name in action_names:
+                policy.authorize(action_name, af.to_dict(), context)
 
             if any(i in updates for i in ('name', 'version', 'visibility')):
                 # to change an artifact scope it's required to set a lock first
@@ -228,14 +265,16 @@ class Engine(object):
                         context, type_name, updates.get('name', af.name),
                         updates.get('version', af.version), af.owner,
                         updates.get('visibility', af.visibility)):
-                    modified_af = action(context, af, updates)
+                    modified_af = af.update_artifact(
+                        context, af['id'], updates)
             else:
-                modified_af = action(context, af, updates)
+                modified_af = af.update_artifact(context, af['id'], updates)
 
-            Notifier.notify(context, action_name, modified_af)
+            for action_name in action_names:
+                Notifier.notify(context, action_name, modified_af)
             return modified_af.to_dict()
 
-    def get(self, context, type_name, artifact_id):
+    def show(self, context, type_name, artifact_id):
         """Show detailed artifact info.
 
         :param context: user context
@@ -244,8 +283,8 @@ class Engine(object):
         :return: definition of requested artifact
         """
         policy.authorize("artifact:get", {}, context)
-        af = self._get_artifact(context, type_name, artifact_id,
-                                read_only=True)
+        af = self._show_artifact(context, type_name, artifact_id,
+                                 read_only=True)
         return af.to_dict()
 
     @staticmethod
@@ -280,8 +319,9 @@ class Engine(object):
         :param type_name: Artifact type name
         :param artifact_id: id of artifact to delete
         """
-        af = self._get_artifact(context, type_name, artifact_id)
+        af = self._show_artifact(context, type_name, artifact_id)
         policy.authorize("artifact:delete", af.to_dict(), context)
+        af.validate_delete(context, af)
         af.delete(context, af)
         Notifier.notify(context, "artifact.delete", af)
 
@@ -299,16 +339,17 @@ class Engine(object):
          in this dict
         :return: dict representation of updated artifact
         """
-        af = self._get_artifact(context, type_name, artifact_id)
+        af = self._show_artifact(context, type_name, artifact_id)
+        # enable additional checks to validate user input.
+        af._user_input = True
         action_name = 'artifact:set_location'
         policy.authorize(action_name, af.to_dict(), context)
-        af.validate_upload_allowed(af, field_name, blob_key)
 
         blob_name = "%s[%s]" % (field_name, blob_key)\
             if blob_key else field_name
 
         blob = {'url': location, 'size': None, 'md5': None, 'sha1': None,
-                'sha256': None, 'status': glare_fields.BlobFieldType.ACTIVE,
+                'sha256': None, 'status': 'active', 'id': str(uuid.uuid4()),
                 'external': True, 'content_type': None}
         md5 = blob_meta.pop("md5", None)
         if md5 is None:
@@ -320,8 +361,10 @@ class Engine(object):
             blob["md5"] = md5
             blob["sha1"] = blob_meta.pop("sha1", None)
             blob["sha256"] = blob_meta.pop("sha256", None)
-        modified_af = self.update_blob(
-            context, type_name, artifact_id, blob, field_name, blob_key)
+        lock_key = "%s:%s" % (type_name, artifact_id)
+        with self.lock_engine.acquire(context, lock_key):
+            modified_af = self._init_blob(
+                context, af, blob, field_name, blob_key)
         LOG.info("External location %(location)s has been created "
                  "successfully for artifact %(artifact)s blob %(blob)s",
                  {'location': location, 'artifact': af.id,
@@ -345,23 +388,22 @@ class Engine(object):
         :return: dict representation of updated artifact
         """
         path = None
-        af = self._get_artifact(context, type_name, artifact_id)
+        af = self._show_artifact(context, type_name, artifact_id)
+        # enable additional checks to validate user input.
+        af._user_input = True
         action_name = "artifact:upload"
         policy.authorize(action_name, af.to_dict(), context)
-        af.validate_upload_allowed(af, field_name, blob_key)
         try:
+            blob_id = str(uuid.uuid4())
             # create an an empty blob instance in db with 'saving' status
             blob = {'url': None, 'size': None, 'md5': None, 'sha1': None,
-                    'sha256': None,
-                    'status': glare_fields.BlobFieldType.SAVING,
+                    'sha256': None, 'id': blob_id,
+                    'status': 'saving',
                     'external': False, 'content_type': content_type}
-            modified_af = self.update_blob(
-                context, type_name, artifact_id, blob, field_name, blob_key)
-
-            if blob_key is None:
-                blob_id = getattr(modified_af, field_name)['id']
-            else:
-                blob_id = getattr(modified_af, field_name)[blob_key]['id']
+            lock_key = "%s:%s" % (type_name, artifact_id)
+            with self.lock_engine.acquire(context, lock_key):
+                modified_af = self._init_blob(
+                    context, af, blob, field_name, blob_key)
 
             # try to perform blob uploading to storage backend
             try:
@@ -394,11 +436,19 @@ class Engine(object):
 
             # update blob info and activate it
             blob.update({'url': location_uri,
-                         'status': glare_fields.BlobFieldType.ACTIVE,
+                         'status': 'active',
                          'size': size})
             blob.update(checksums)
-            modified_af = self.update_blob(
-                context, type_name, artifact_id, blob, field_name, blob_key)
+            lock_key = "%s:%s" % (type_name, artifact_id)
+            with self.lock_engine.acquire(context, lock_key):
+                af = self._show_artifact(context, type_name, artifact_id)
+                if blob_key:
+                    field_value = getattr(af, field_name)
+                    field_value[blob_key] = blob
+                else:
+                    field_value = blob
+                modified_af = af.update_blob(
+                    context, af.id, field_name, field_value)
 
             Notifier.notify(context, action_name, modified_af)
             return modified_af.to_dict()
@@ -406,32 +456,48 @@ class Engine(object):
             if path:
                 os.remove(path)
 
-    def update_blob(self, context, type_name, artifact_id, blob,
-                    field_name, blob_key=None, validate=False):
-        """Update blob info.
+    @staticmethod
+    def _init_blob(context, af, value, field_name, blob_key=None):
+        """Validate if given blob is ready for uploading.
 
-        :param context: user context
-        :param type_name: name of artifact type
-        :param artifact_id: id of the artifact to be updated
-        :param blob: blob representation in dict format
-        :param field_name: name of blob or blob dict field
-        :param blob_key: if field_name is blob dict it specifies key
-         in this dict
-
-        :return: dict representation of updated artifact
+        :param af: current artifact object
+        :param value: dict representation of the blob
+        :param field_name: blob or blob dict field name
+        :param blob_key: indicates key name if field_name is a blob dict
         """
-        lock_key = "%s:%s" % (type_name, artifact_id)
-        with self.lock_engine.acquire(context, lock_key):
-            af = self._get_artifact(context, type_name, artifact_id)
-            if blob_key is None:
-                setattr(af, field_name, blob)
-                return af.update_blob(
-                    context, af.id, field_name, getattr(af, field_name))
-            else:
-                blob_dict_attr = getattr(af, field_name)
-                blob_dict_attr[blob_key] = blob
-                return af.update_blob(
-                    context, af.id, field_name, blob_dict_attr)
+
+        blob_name = "%s[%s]" % (field_name, blob_key)\
+            if blob_key else field_name
+
+        if blob_key:
+            if not af.is_blob_dict(field_name):
+                msg = _("%s is not a blob dict") % field_name
+                raise exception.BadRequest(msg)
+            field_value = getattr(af, field_name)
+            if field_value.get(blob_key) is not None:
+                msg = (_("Cannot re-upload blob value to blob dict %(blob)s "
+                         "with key %(key)s for artifact %(af)s") %
+                       {'blob': field_name, 'key': blob_key, 'af': af.id})
+                raise exception.Conflict(message=msg)
+            field_value[blob_key] = value
+            value = field_value
+        else:
+            if not af.is_blob(field_name):
+                msg = _("%s is not a blob") % field_name
+                raise exception.BadRequest(msg)
+            field_value = getattr(af, field_name, None)
+            if field_value is not None:
+                msg = _("Cannot re-upload blob %(blob)s for artifact "
+                        "%(af)s") % {'blob': field_name, 'af': af.id}
+                raise exception.Conflict(message=msg)
+        setattr(af, field_name, value)
+
+        LOG.debug("Parameters validation for artifact %(artifact)s blob "
+                  "upload passed for blob %(blob_name)s. "
+                  "Start blob uploading to backend.",
+                  {'artifact': af.id, 'blob_name': blob_name})
+        return af.update_blob(
+            context, af.id, field_name, value)
 
     def download_blob(self, context, type_name, artifact_id, field_name,
                       blob_key=None):
@@ -445,8 +511,8 @@ class Engine(object):
          in this dict
         :return: file iterator for requested file
         """
-        af = self._get_artifact(context, type_name, artifact_id,
-                                read_only=True)
+        af = self._show_artifact(context, type_name, artifact_id,
+                                 read_only=True)
         policy.authorize("artifact:download", af.to_dict(), context)
 
         blob_name = "%s[%s]" % (field_name, blob_key)\
@@ -460,12 +526,12 @@ class Engine(object):
             msg = _("%s is not a blob dict") % field_name
             raise exception.BadRequest(msg)
 
-        if af.status == af.STATUS.DEACTIVATED and not context.is_admin:
+        if af.status == 'deactivated' and not context.is_admin:
             msg = _("Only admin is allowed to download artifact data "
                     "when it's deactivated")
             raise exception.Forbidden(message=msg)
 
-        if af.status == af.STATUS.DELETED:
+        if af.status == 'deleted':
             msg = _("Cannot download data when artifact is deleted")
             raise exception.Forbidden(message=msg)
 

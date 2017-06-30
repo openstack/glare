@@ -262,7 +262,7 @@ class ArtifactsController(api_versioning.VersionedResource):
         :param artifact_id: id of artifact to show
         :return: definition of requested artifact
         """
-        return self.engine.get(req.context, type_name, artifact_id)
+        return self.engine.show(req.context, type_name, artifact_id)
 
     @supported_versions(min_ver='1.0')
     @log_request_progress

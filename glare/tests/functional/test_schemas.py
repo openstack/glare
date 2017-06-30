@@ -15,7 +15,6 @@
 
 import jsonschema
 
-from glare.common import utils
 from glare.tests.functional import base
 
 fixture_base_props = {
@@ -98,6 +97,7 @@ fixture_base_props = {
                                 u'neq',
                                 u'in'],
                 u'glareType': u'String',
+                u'mutable': True,
                 u'sortable': True,
                 u'type': u'string'},
     u'tags': {u'default': [],
@@ -118,6 +118,7 @@ fixture_base_props = {
         u'filter_ops': [u'lt', u'gt'],
         u'format': u'date-time',
         u'glareType': u'DateTime',
+        u'mutable': True,
         u'readOnly': True,
         u'sortable': True,
         u'type': u'string'},
@@ -144,7 +145,7 @@ fixture_base_props = {
                     u'enum': [u'private', u'public'],
                     u'filter_ops': [u'eq', u'neq', u'in'],
                     u'glareType': u'String',
-                    u'maxLength': 255,
+                    u'mutable': True,
                     u'sortable': True,
                     u'type': u'string'}
 }
@@ -621,7 +622,6 @@ fixtures = {
                                 u'neq',
                                 u'in'],
                 u'glareType': u'String',
-                u'maxLength': 255,
                 u'type': [u'string',
                           u'null']}
         }),
@@ -658,7 +658,6 @@ fixtures = {
                                                   u'neq',
                                                   u'in'],
                                   u'glareType': u'String',
-                                  u'maxLength': 255,
                                   u'type': [u'string',
                                             u'null']},
 
@@ -678,7 +677,6 @@ fixtures = {
                                              u'neq',
                                              u'in'],
                              u'glareType': u'String',
-                             u'maxLength': 255,
                              u'type': [u'string', u'null']},
             u'image': {u'additionalProperties': False,
                        u'description': u'Image binary.',
@@ -939,15 +937,11 @@ class TestSchemas(base.TestArtifact):
         # Get schemas for specific artifact type
         for at in self.enabled_types:
             result = self.get(url='/schemas/%s' % at)
-            self.assertEqual(fixtures[at], result['schemas'][at],
-                             utils.DictDiffer(
-                                 fixtures[at]['properties'],
-                                 result['schemas'][at]['properties']))
+            self.assertEqual(fixtures[at], result['schemas'][at])
 
         # Get list schemas of artifacts
         result = self.get(url='/schemas')
-        self.assertEqual(fixtures, result['schemas'], utils.DictDiffer(
-            fixtures, result['schemas']))
+        self.assertEqual(fixtures, result['schemas'])
 
         # Validation of schemas
         result = self.get(url='/schemas')['schemas']
