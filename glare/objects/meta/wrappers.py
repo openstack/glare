@@ -25,6 +25,7 @@ FILTERS = (
     FILTER_LTE) = ('eq', 'neq', 'in', 'gt', 'gte', 'lt', 'lte')
 
 DEFAULT_MAX_BLOB_SIZE = 10485760
+DEFAULT_MAX_FOLDER_SIZE = 1000000000000  # 10^12 bytes - Terabyte
 
 
 class Field(object):
@@ -246,11 +247,14 @@ class BlobField(Field):
 
 
 class FolderField(DictField):
-    def __init__(self, max_blob_size=DEFAULT_MAX_BLOB_SIZE, **kwargs):
+    def __init__(self, max_blob_size=DEFAULT_MAX_BLOB_SIZE,
+                 max_folder_size=DEFAULT_MAX_FOLDER_SIZE, **kwargs):
         super(FolderField, self).__init__(
             element_type=glare_fields.BlobFieldType, **kwargs)
         self.max_blob_size = int(max_blob_size)
+        self.max_folder_size = int(max_folder_size)
         self.field_props.append('max_blob_size')
+        self.field_props.append('max_folder_size')
 
 # Classes below added for backward compatibility. They shouldn't be used
 
