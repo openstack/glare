@@ -12,11 +12,11 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-import uuid
 
 import jsonschema
 from jsonschema import exceptions as json_exceptions
 from oslo_versionedobjects import fields
+from oslo_utils import uuidutils
 import semantic_version
 import six
 import six.moves.urllib.parse as urlparse
@@ -81,7 +81,7 @@ class BlobFieldType(fields.FieldType):
         if not isinstance(value, dict):
             raise ValueError(_("Blob value must be dict. Got %s type instead")
                              % type(value))
-        value.setdefault('id', str(uuid.uuid4()))
+        value.setdefault('id', uuidutils.generate_uuid())
         try:
             jsonschema.validate(value, BlobFieldType.BLOB_SCHEMA)
         except json_exceptions.ValidationError as e:
