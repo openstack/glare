@@ -38,7 +38,7 @@ def create_temporary_file(stream, suffix=''):
     """
     tfd, path = tempfile.mkstemp(suffix=suffix)
     while True:
-        data = stream.read(100000)
+        data = stream.read(65536)
         if data == b'':  # end of file reached
             break
         os.write(tfd, data)
