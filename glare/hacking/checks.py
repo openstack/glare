@@ -132,7 +132,7 @@ def check_python3_xrange(logical_line):
 
 
 def check_python3_no_iteritems(logical_line):
-    msg = ("G330: Use six.iteritems() or dict.items() instead of "
+    msg = ("G330: Use d.items() or dict.items() instead of "
            "dict.iteritems().")
     if re.search(r".*\.iteritems\(\)", logical_line):
         yield(0, msg)
