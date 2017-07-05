@@ -116,9 +116,6 @@ class HackingTestCase(base.BaseTestCase):
             "obj.iteritems()"))))
 
         self.assertEqual(0, len(list(checks.check_python3_no_iteritems(
-            "six.iteritems(obj)"))))
-
-        self.assertEqual(0, len(list(checks.check_python3_no_iteritems(
             "obj.items()"))))
 
     def test_dict_iterkeys(self):
