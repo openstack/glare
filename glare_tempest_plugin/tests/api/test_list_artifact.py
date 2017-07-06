@@ -13,13 +13,11 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-
 import testtools
 
 
 from glare_tempest_plugin.tests.api import base
 from tempest import config
-
 
 CONF = config.CONF
 
@@ -38,3 +36,25 @@ class TestListSanity(base.BaseArtifactTest):
         self.artifacts_client.upload_blob('images', art['id'], 'image', data)
         self.artifacts_client.download_blob('images', art['id'], 'image')
         self.artifacts_client.delete_artifact('images', art['id'])
+
+    # This test is failing!
+    # @testtools.testcase.attr('TestListSanity')
+    # def test_all(self):
+    #     for type_name in [ 'images', 'tosca_templates', 'murano_packages']:
+        #  self.enabled_types:
+    #         if type_name == 'all':
+    #             continue
+    #         for i in range(3):
+    #             for j in range(3):
+    #                 self.artifacts_client.create_artifact(
+    #                     type_name=type_name,
+    #                     name='%s_%d' % (type_name, i),
+    #                           version= '%d' % j,
+    #                           tags= ['tag%s' % i],
+    #                     )
+    #
+    #      # get all possible artifacts
+    #     # url = '/all?sort=name:asc&limit=100'
+    #     res = self.artifacts_client.list_artifacts("all")
+    #     from pprint import pformat
+    #     self.assertEqual(27, len(res[u'all']), pformat(res[u'all']))
