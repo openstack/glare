@@ -113,8 +113,8 @@ class ArtifactsClient(rest_client.RestClient):
             id=art_id)
         self.delete(uri)
 
-    def list_artifacts(self, type_name):
-        uri = '/artifacts/{}'.format(type_name)
+    def list_artifacts(self, type_name, uri=""):
+        uri = '/artifacts/{}'.format(type_name) + uri
         resp, body = self.get(uri)
         self.expected_success(200, resp.status)
         parsed = self._parse_resp(body)
