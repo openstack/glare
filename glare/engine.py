@@ -355,6 +355,16 @@ class Engine(object):
             af.db_api.delete(context, af.id)
         Notifier.notify(context, action_name, af)
 
+    @staticmethod
+    def _save_blob_info(context, af, field_name, blob_key, value):
+        """Save blob instance in database."""
+        if blob_key is not None:
+            # Insert blob value in the folder
+            folder = getattr(af, field_name)
+            folder[blob_key] = value
+            value = folder
+        return af.update_blob(context, af.id, field_name, value)
+
     def add_blob_location(self, context, type_name, artifact_id, field_name,
                           location, blob_meta, blob_key=None):
         """Add external location to blob.
@@ -382,8 +392,10 @@ class Engine(object):
             af = self._show_artifact(context, type_name, artifact_id)
             action_name = 'artifact:set_location'
             policy.authorize(action_name, af.to_dict(), context)
-            modified_af = self._init_blob(
-                context, af, blob, field_name, blob_key)
+            utils.validate_blob_creation(af, field_name, blob_key)
+            modified_af = self._save_blob_info(
+                context, af, field_name, blob_key, blob)
+
         LOG.info("External location %(location)s has been created "
                  "successfully for artifact %(artifact)s blob %(blob)s",
                  {'location': location, 'artifact': af.id,
@@ -392,8 +404,37 @@ class Engine(object):
         Notifier.notify(context, action_name, modified_af)
         return modified_af.to_dict()
 
+    @staticmethod
+    def _calculate_allowed_space(context, af, field_name, content_length=None,
+                                 blob_key=None):
+        """Calculate the maximum amount of data user can upload to a blob."""
+        # As a default we take the maximum blob size
+        max_allowed_size = af.get_max_blob_size(field_name)
+
+        if blob_key is not None:
+            # For folders we also compare it with the maximum folder size
+            blobs_dict = getattr(af, field_name)
+            overall_folder_size = sum(
+                blob["size"] for blob in blobs_dict.values()
+                if blob["size"] is not None)
+            max_folder_size_allowed = af.get_max_folder_size(
+                field_name) - overall_folder_size  # always non-negative
+            max_allowed_size = min(max_allowed_size,
+                                   max_folder_size_allowed)
+
+        if content_length is None:
+            # if no content_length was provided we have to allocate
+            # all allowed space for the blob
+            size = max_allowed_size
+        else:
+            if content_length > max_allowed_size:
+                raise exception.RequestEntityTooLarge()
+            size = content_length
+
+        return size
+
     def upload_blob(self, context, type_name, artifact_id, field_name, fd,
-                    content_type, blob_key=None):
+                    content_type, content_length=None, blob_key=None):
         """Upload Artifact blob.
 
         :param context: user context
@@ -402,6 +443,7 @@ class Engine(object):
         :param field_name: name of blob or blob dict field
         :param fd: file descriptor that Glare uses to upload the file
         :param content_type: data content-type
+        :param content_length: amount of data user wants to upload
         :param blob_key: if field_name is blob dict it specifies key
          in this dictionary
         :return: dict representation of updated artifact
@@ -410,18 +452,23 @@ class Engine(object):
         blob_name = "%s[%s]" % (field_name, blob_key) \
             if blob_key else field_name
         blob_id = uuidutils.generate_uuid()
-        # create an an empty blob instance in db with 'saving' status
-        blob = {'url': None, 'size': None, 'md5': None, 'sha1': None,
-                'sha256': None, 'id': blob_id, 'status': 'saving',
-                'external': False, 'content_type': content_type}
 
         lock_key = "%s:%s" % (type_name, artifact_id)
         with self.lock_engine.acquire(context, lock_key):
             af = self._show_artifact(context, type_name, artifact_id)
             action_name = "artifact:upload"
             policy.authorize(action_name, af.to_dict(), context)
-            modified_af = self._init_blob(
-                context, af, blob, field_name, blob_key)
+
+            # create an an empty blob instance in db with 'saving' status
+            utils.validate_blob_creation(af, field_name, blob_key)
+            size = self._calculate_allowed_space(
+                context, af, field_name, content_length, blob_key)
+            blob = {'url': None, 'size': size, 'md5': None, 'sha1': None,
+                    'sha256': None, 'id': blob_id, 'status': 'saving',
+                    'external': False, 'content_type': content_type}
+
+            modified_af = self._save_blob_info(
+                context, af, field_name, blob_key, blob)
 
         LOG.debug("Parameters validation for artifact %(artifact)s blob "
                   "upload passed for blob %(blob_name)s. "
@@ -437,22 +484,10 @@ class Engine(object):
             except Exception as e:
                 raise exception.BadRequest(message=str(e))
 
-            max_allowed_size = af.get_max_blob_size(field_name)
-            # Check if we wanna upload to a folder (and not just to a Blob)
-            if blob_key is not None:
-                blobs_dict = getattr(af, field_name)
-                overall_folder_size = sum(
-                    blob["size"] for blob in blobs_dict.values()
-                    if blob["size"] is not None)
-                max_folder_size_allowed = af.get_max_folder_size(field_name) \
-                    - overall_folder_size  # always non-negative
-                max_allowed_size = min(max_allowed_size,
-                                       max_folder_size_allowed)
-
             default_store = af.get_default_store(
                 context, af, field_name, blob_key)
             location_uri, size, checksums = store_api.save_blob_to_store(
-                blob_id, fd, context, max_allowed_size,
+                blob_id, fd, context, size,
                 store_type=default_store)
         except Exception:
             # if upload failed remove blob from db and storage
@@ -479,50 +514,11 @@ class Engine(object):
 
         with self.lock_engine.acquire(context, lock_key):
             af = af.show(context, artifact_id)
-            if blob_key:
-                field_value = getattr(af, field_name)
-                field_value[blob_key] = blob
-            else:
-                field_value = blob
-            modified_af = af.update_blob(
-                context, af.id, field_name, field_value)
+            modified_af = self._save_blob_info(
+                context, af, field_name, blob_key, blob)
 
         Notifier.notify(context, action_name, modified_af)
         return modified_af.to_dict()
-
-    @staticmethod
-    def _init_blob(context, af, value, field_name, blob_key=None):
-        """Validate if given blob is ready for uploading.
-
-        :param af: current artifact object
-        :param value: dict representation of the blob
-        :param field_name: blob or blob dict field name
-        :param blob_key: indicates key name if field_name is a blob dict
-        """
-        if blob_key:
-            if not af.is_blob_dict(field_name):
-                msg = _("%s is not a blob dict") % field_name
-                raise exception.BadRequest(msg)
-            field_value = getattr(af, field_name)
-            if field_value.get(blob_key) is not None:
-                msg = (_("Cannot re-upload blob value to blob dict %(blob)s "
-                         "with key %(key)s for artifact %(af)s") %
-                       {'blob': field_name, 'key': blob_key, 'af': af.id})
-                raise exception.Conflict(message=msg)
-            field_value[blob_key] = value
-            value = field_value
-        else:
-            if not af.is_blob(field_name):
-                msg = _("%s is not a blob") % field_name
-                raise exception.BadRequest(msg)
-            field_value = getattr(af, field_name, None)
-            if field_value is not None:
-                msg = _("Cannot re-upload blob %(blob)s for artifact "
-                        "%(af)s") % {'blob': field_name, 'af': af.id}
-                raise exception.Conflict(message=msg)
-        utils.validate_change_allowed(af, field_name)
-
-        return af.update_blob(context, af.id, field_name, value)
 
     def download_blob(self, context, type_name, artifact_id, field_name,
                       blob_key=None):

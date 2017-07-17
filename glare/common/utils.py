@@ -580,3 +580,32 @@ def validate_change_allowed(af, field_name):
         msg = (_("Forbidden to change field '%s' after activation.")
                % field_name)
         raise exception.Forbidden(message=msg)
+
+
+def validate_blob_creation(af, field_name, blob_key=None):
+    """Validate if given blob is ready for uploading.
+
+    :param af: current artifact object
+    :param field_name: blob or blob dict field name
+    :param blob_key: indicates key name if field_name is a blob dict
+    """
+    if blob_key:
+        if not af.is_blob_dict(field_name):
+            msg = _("%s is not a blob dict") % field_name
+            raise exception.BadRequest(msg)
+        field_value = getattr(af, field_name)
+        if field_value.get(blob_key) is not None:
+            msg = (_("Cannot re-upload blob value to blob dict %(blob)s "
+                     "with key %(key)s for artifact %(af)s") %
+                   {'blob': field_name, 'key': blob_key, 'af': af.id})
+            raise exception.Conflict(message=msg)
+    else:
+        if not af.is_blob(field_name):
+            msg = _("%s is not a blob") % field_name
+            raise exception.BadRequest(msg)
+        field_value = getattr(af, field_name, None)
+        if field_value is not None:
+            msg = _("Cannot re-upload blob %(blob)s for artifact "
+                    "%(af)s") % {'blob': field_name, 'af': af.id}
+            raise exception.Conflict(message=msg)
+    validate_change_allowed(af, field_name)
