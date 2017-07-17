@@ -707,7 +707,8 @@ class TestBlobs(base.TestArtifact):
                                          'version': '0.0.1',
                                          'string_required': 'test'})
         url = '/sample_artifact/%s' % art['id']
-        headers = {'Content-Type': 'application/octet-stream'}
+        headers = {'Content-Type': 'application/octet-stream',
+                   'Content-Length': '4'}
 
         # upload to non-existing property
         self.put(url=url + '/blob_non_exist', data=data, status=400,
@@ -767,7 +768,7 @@ class TestBlobs(base.TestArtifact):
         url = '/sample_artifact/%s' % art['id']
 
         # download not uploaded blob
-        self.get(url=url + '/blob', status=400)
+        self.get(url=url + '/blob', status=404)
 
         # download blob from not existing artifact
         self.get(url=url + '1/blob', status=404)
