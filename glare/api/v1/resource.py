@@ -175,10 +175,15 @@ class RequestDeserializer(api_versioning.VersionedResource,
                 msg = _("url is required when specifying external location. "
                         "Cannot find 'url' in request body: %s") % str(data)
                 raise exc.BadRequest(msg)
-            if 'md5' not in data:
-                msg = _("Incorrect blob metadata. MD5 must be specified "
-                        "for external location in artifact blob.")
-                raise exc.BadRequest(msg)
+            if data.get('location_type', 'external') == 'external':
+                url = data.get('url')
+                if not url.startswith('http'):
+                    msg = _("Url '%s' doesn't have http(s) scheme") % url
+                    raise exc.BadRequest(msg)
+                if 'md5' not in data:
+                    msg = _("Incorrect blob metadata. MD5 must be specified "
+                            "for external location in artifact blob.")
+                    raise exc.BadRequest(msg)
         else:
             data = req.body_file
 
