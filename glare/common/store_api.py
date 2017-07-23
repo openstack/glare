@@ -24,6 +24,7 @@ from glare.store import database
 CONF = cfg.CONF
 LOG = logging.getLogger(__name__)
 database_api = database.DatabaseStoreAPI()
+RESTRICTED_URI_SCHEMES = ('file', 'filesystem', 'swift+config', 'sql')
 
 error_map = [{'catch': store_exc.NotFound,
               'raise': exception.NotFound},
@@ -112,3 +113,7 @@ def delete_blob(uri, context):
     if uri.startswith("sql://"):
         return database_api.delete_from_store(uri, context)
     return backend.delete_from_backend(uri, context)
+
+
+def get_known_schemes():
+    return list(backend.get_known_schemes()) + ['sql']
