@@ -22,7 +22,6 @@ Utility methods for working with WSGI servers
 from __future__ import print_function
 
 import errno
-import functools
 import os
 import signal
 import sys
@@ -257,12 +256,6 @@ class Server(object):
         except OSError:
             self.pgid = 0
 
-    def hup(self, *args):
-        """Reloads configuration files with zero down time
-        """
-        signal.signal(signal.SIGHUP, signal.SIG_IGN)
-        raise glare_exc.SIGHUPInterrupt
-
     def kill_children(self, *args):
         """Kills the entire process group."""
         signal.signal(signal.SIGTERM, signal.SIG_IGN)
@@ -292,7 +285,6 @@ class Server(object):
             LOG.info("Starting %d workers", workers)
             signal.signal(signal.SIGTERM, self.kill_children)
             signal.signal(signal.SIGINT, self.kill_children)
-            signal.signal(signal.SIGHUP, self.hup)
             while len(self.children) < workers:
                 self.run_child()
 
@@ -335,60 +327,17 @@ class Server(object):
             except KeyboardInterrupt:
                 LOG.info('Caught keyboard interrupt. Exiting.')
                 break
-            except glare_exc.SIGHUPInterrupt:
-                self.reload()
-                continue
         eventlet.greenio.shutdown_safe(self.sock)
         self.sock.close()
         LOG.debug('Exited')
 
-    def configure(self, old_conf=None, has_changed=None):
-        """Apply configuration settings
-
-        :param old_conf: Cached old configuration settings (if any)
-        :param has_changed: callable to determine if a parameter has changed
-        """
+    def configure(self):
+        """Apply configuration settings."""
         eventlet.wsgi.MAX_HEADER_LINE = CONF.max_header_line
         self.client_socket_timeout = CONF.client_socket_timeout or None
-
-        # determine if we need to reload artifact type definitions
-        if old_conf is not None and (
-                has_changed('enabled_artifact_types') or
-                has_changed('custom_artifact_types_modules')):
-            from glare import engine
-            engine.Engine.registry.reset_registry()
-            engine.Engine.registry.register_all_artifacts()
-
-        self.configure_socket(old_conf, has_changed)
+        self.configure_socket()
         if self.initialize_glance_store:
             initialize_glance_store()
-
-    def reload(self):
-        """Reload and re-apply configuration settings
-
-        Existing child processes are sent a SIGHUP signal
-        and will exit after completing existing requests.
-        New child processes, which will have the updated
-        configuration, are spawned. This allows preventing
-        interruption to the service.
-        """
-        def _has_changed(old, new, param):
-            old = old.get(param)
-            new = getattr(new, param)
-            return new != old
-
-        old_conf = utils.stash_conf_values()
-        has_changed = functools.partial(_has_changed, old_conf, CONF)
-        CONF.reload_config_files()
-        os.killpg(self.pgid, signal.SIGHUP)
-        self.stale_children = self.children
-        self.children = set()
-
-        # Ensure any logging config changes are picked up
-        logging.setup(CONF, 'glare')
-
-        self.configure(old_conf, has_changed)
-        self.start_wsgi()
 
     def wait(self):
         """Wait until all servers have completed running."""
@@ -401,23 +350,13 @@ class Server(object):
             pass
 
     def run_child(self):
-        def child_hup(*args):
-            """Shuts down child processes, existing requests are handled."""
-            signal.signal(signal.SIGHUP, signal.SIG_IGN)
-            eventlet.wsgi.is_accepting = False
-            self.sock.close()
-
         pid = os.fork()
         if pid == 0:
-            signal.signal(signal.SIGHUP, child_hup)
             signal.signal(signal.SIGTERM, signal.SIG_DFL)
             # ignore the interrupt signal to avoid a race whereby
             # a child worker receives the signal before the parent
             # and is respawned unnecessarily as a result
             signal.signal(signal.SIGINT, signal.SIG_IGN)
-            # The child has no need to stash the unwrapped
-            # socket, and the reference prevents a clean
-            # exit on sighup
             self._sock = None
             self.run_server()
             LOG.info('Child %d exiting normally', os.getpid())
@@ -458,73 +397,24 @@ class Server(object):
                              keepalive=CONF.http_keepalive,
                              socket_timeout=self.client_socket_timeout)
 
-    def configure_socket(self, old_conf=None, has_changed=None):
-        """Ensure a socket exists and is appropriately configured.
+    def configure_socket(self):
+        """Ensure a socket exists and is appropriately configured."""
+        _sock = get_socket(self.default_port)
+        _sock.setsockopt(socket.SOL_SOCKET,
+                         socket.SO_REUSEADDR, 1)
+        # sockets can hang around forever without keepalive
+        _sock.setsockopt(socket.SOL_SOCKET,
+                         socket.SO_KEEPALIVE, 1)
+        self.sock = _sock
 
-        This function is called on start up, and can also be
-        called in the event of a configuration reload.
-
-        When called for the first time a new socket is created.
-        If reloading and either bind_host or bind_port have been
-        changed the existing socket must be closed and a new
-        socket opened (laws of physics).
-
-        In all other cases (bind_host/bind_port have not changed)
-        the existing socket is reused.
-
-        :param old_conf: Cached old configuration settings (if any)
-        :param has_changed: callable to determine if a parameter has changed
-        """
-        # Do we need a fresh socket?
-        new_sock = (old_conf is None or (
-                    has_changed('bind_host') or
-                    has_changed('bind_port')))
         # Will we be using https?
-        use_ssl = not (not CONF.cert_file or not CONF.key_file)
-        # Were we using https before?
-        old_use_ssl = (old_conf is not None and not (
-                       not old_conf.get('key_file') or
-                       not old_conf.get('cert_file')))
-        # Do we now need to perform an SSL wrap on the socket?
-        wrap_sock = use_ssl is True and (old_use_ssl is False or new_sock)
-        # Do we now need to perform an SSL unwrap on the socket?
-        unwrap_sock = use_ssl is False and old_use_ssl is True
+        if not (not CONF.cert_file or not CONF.key_file):
+            self.sock = ssl_wrap_socket(self.sock)
 
-        if new_sock:
-            self._sock = None
-            if old_conf is not None:
-                self.sock.close()
-            _sock = get_socket(self.default_port)
-            _sock.setsockopt(socket.SOL_SOCKET,
-                             socket.SO_REUSEADDR, 1)
-            # sockets can hang around forever without keepalive
-            _sock.setsockopt(socket.SOL_SOCKET,
-                             socket.SO_KEEPALIVE, 1)
-            self._sock = _sock
-
-        if wrap_sock:
-            self.sock = ssl_wrap_socket(self._sock)
-
-        if unwrap_sock or new_sock and not use_ssl:
-            self.sock = self._sock
-
-        # Pick up newly deployed certs
-        if old_conf is not None and use_ssl is True and old_use_ssl is True:
-            if has_changed('cert_file') or has_changed('key_file'):
-                utils.validate_key_cert(CONF.key_file, CONF.cert_file)
-            if has_changed('cert_file'):
-                self.sock.certfile = CONF.cert_file
-            if has_changed('key_file'):
-                self.sock.keyfile = CONF.key_file
-
-        if new_sock or (old_conf is not None and has_changed('tcp_keepidle')):
-            # This option isn't available in the OS X version of eventlet
-            if hasattr(socket, 'TCP_KEEPIDLE'):
-                self.sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPIDLE,
-                                     CONF.tcp_keepidle)
-
-        if old_conf is not None and has_changed('backlog'):
-            self.sock.listen(CONF.backlog)
+        # This option isn't available in the OS X version of eventlet
+        if hasattr(socket, 'TCP_KEEPIDLE'):
+            self.sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPIDLE,
+                                 CONF.tcp_keepidle)
 
 
 class APIMapper(routes.Mapper):
