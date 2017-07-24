@@ -15,10 +15,12 @@
 
 """Contains additional file utils that may be useful for upload hooks."""
 
+import io
 import os
 import tempfile
 import zipfile
 
+from glare.common import utils
 from oslo_config import cfg
 from oslo_log import log as logging
 from oslo_utils import excutils
@@ -98,3 +100,28 @@ def upload_content_file(context, af, data, blob_dict, key_name,
     blob.update(checksums)
     getattr(af, blob_dict)[key_name] = blob
     af.update_blob(context, af.id, blob_dict, getattr(af, blob_dict))
+
+
+def unpack_zip_archive_in_memory(context, af, fd):
+    """unpack zip archive in memory.
+
+        :param context: user context
+        :param af: artifact object
+        :param fd: file
+        :return io.BytesIO object- simple stream of in-memory bytes, None
+        """
+    flobj = io.BytesIO(fd.read())
+    while True:
+        data = fd.read(65536)
+        if data == b'':  # end of file reached
+            break
+        flobj.write(data)
+
+    zip_ref = zipfile.ZipFile(flobj, 'r')
+    for name in zip_ref.namelist():
+        if not name.endswith('/'):
+            upload_content_file(
+                context, af, utils.BlobIterator(zip_ref.read(name)),
+                'content', name)
+    flobj.seek(0)
+    return flobj, None
