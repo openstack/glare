@@ -25,12 +25,14 @@ from oslo_log import log as logging
 from oslo_utils import excutils
 from oslo_utils import uuidutils
 
+from glare.common import exception
 from glare.common import store_api
 from glare.common import utils
 from glare.objects.meta import fields as glare_fields
 
 CONF = cfg.CONF
 LOG = logging.getLogger(__name__)
+RAM_BYTES_IN_USAGE_LIMIT = 128000000  # 128 megabytes
 
 
 def create_temporary_file(stream, suffix=''):
@@ -116,12 +118,13 @@ def unpack_zip_archive_in_memory(context, af, field_name, fd):
     #  types may cause denial of the service.
     #  Thus it should be used only with blobs with reduced max_blob_size
 
-    flobj = io.BytesIO(fd.read())
-    while True:
-        data = fd.read(65536)
-        if data == b'':  # end of file reached
-            break
-        flobj.write(data)
+    flobj = io.BytesIO(fd.read(RAM_BYTES_IN_USAGE_LIMIT))
+    data = fd.read(1)
+    if data:  # end of file reached
+        msg = "The zip you are trying to unpack is too big." \
+              " The upper limit is %s"\
+              % RAM_BYTES_IN_USAGE_LIMIT
+        raise exception.BadRequest(msg)
 
     zip_ref = zipfile.ZipFile(flobj, 'r')
     for name in zip_ref.namelist():
