@@ -27,6 +27,8 @@ from glare.objects.meta import validators
 from glare.objects.meta import wrappers
 
 global_artifact_opts = [
+    cfg.IntOpt('max_uploaded_data', default=1099511627776),  # 1 Terabyte
+    cfg.IntOpt('max_artifact_count', default=100),
     cfg.BoolOpt('delayed_delete', default=False,
                 help=_("If False defines that artifacts must be deleted "
                        "immediately after the user call. Otherwise they just "
@@ -125,6 +127,8 @@ class BaseArtifact(base.VersionedObject):
     }
 
     artifact_type_opts = [
+        cfg.IntOpt('max_uploaded_data'),
+        cfg.IntOpt('max_artifact_count'),
         cfg.BoolOpt('delayed_delete',
                     help=_(
                         "If False defines that artifacts must be deleted "

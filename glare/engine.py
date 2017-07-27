@@ -33,6 +33,7 @@ from glare.i18n import _
 from glare import locking
 from glare.notification import Notifier
 from glare.objects.meta import registry
+from glare import quota
 
 CONF = cfg.CONF
 LOG = logging.getLogger(__name__)
@@ -79,9 +80,10 @@ class Engine(object):
             filters.extend([('owner', 'eq:' + owner),
                             ('visibility', 'private')])
 
-        scope_id = "%s:%s:%s" % (type_name, name, version)
-        if visibility != 'public':
-            scope_id += ':%s' % owner
+        scope_id = owner
+        if visibility == 'public':
+            scope_id = "%s:%s:%s" % (type_name, name, version)
+
         lock = self.lock_engine.acquire(context, scope_id)
 
         try:
@@ -214,6 +216,7 @@ class Engine(object):
         # acquire scoped lock and execute artifact create
         with self._create_scoped_lock(context, type_name, af.name,
                                       af.version, context.tenant):
+            quota.verify_artifact_count(context, type_name)
             for field_name, value in values.items():
                 if af.is_blob(field_name) or af.is_blob_dict(field_name):
                     msg = _("Cannot add blob with this request. "
@@ -506,6 +509,7 @@ class Engine(object):
             utils.validate_change_allowed(af, field_name)
             size = self._calculate_allowed_space(
                 context, af, field_name, content_length, blob_key)
+            quota.verify_uploaded_data_amount(context, type_name, size)
             blob = {'url': None, 'size': size, 'md5': None, 'sha1': None,
                     'sha256': None, 'id': blob_id, 'status': 'saving',
                     'external': False, 'content_type': content_type}
