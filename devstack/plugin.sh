@@ -57,6 +57,9 @@ function configure_glare {
 
     iniset $GLARE_CONF_FILE DEFAULT debug $GLARE_DEBUG
 
+    echo Installer. Additional modules: $GLARE_CUSTOM_MODULES
+    echo Installer. Enabled types: $GLARE_ENABLED_TYPES
+
     # Specify additional modules with external artifact types
     if [ -n "$GLARE_CUSTOM_MODULES" ]; then
         iniset $GLARE_CONF_FILE DEFAULT custom_artifact_types_modules $GLARE_CUSTOM_MODULES

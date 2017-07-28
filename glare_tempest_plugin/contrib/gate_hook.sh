@@ -12,3 +12,15 @@
 # WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 # License for the specific language governing permissions and limitations
 # under the License.
+
+export DEVSTACK_GATE_INSTALL_TESTONLY=1
+export DEVSTACK_GATE_TEMPEST=1
+export DEVSTACK_GATE_TEMPEST_NOTESTS=1
+export KEEP_LOCALRC=1
+
+echo Gate hook. Additional modules: $GLARE_CUSTOM_MODULES
+echo Gate hook. Enabled types: $GLARE_ENABLED_TYPES
+
+GATE_DEST=$BASE/new
+DEVSTACK_PATH=$GATE_DEST/devstack
+$GATE_DEST/devstack-gate/devstack-vm-gate.sh
