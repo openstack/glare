@@ -12,3 +12,23 @@
 # WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 # License for the specific language governing permissions and limitations
 # under the License.
+
+echo "gate_hook.sh executed"
+
+export DEVSTACK_GATE_NEUTRON=1
+export DEVSTACK_GATE_HEAT=1
+export DEVSTACK_GATE_INSTALL_TESTONLY=1
+export DEVSTACK_GATE_TEMPEST=1
+export DEVSTACK_GATE_TEMPEST_NOTESTS=1
+export KEEP_LOCALRC=1
+
+if [ -z ${ENABLED_SERVICES+x} ]; then
+    ENABLED_SERVICES=tempest
+fi
+ENABLED_SERVICES+=,glare
+export ENABLED_SERVICES
+
+
+GATE_DEST=$BASE/new
+DEVSTACK_PATH=$GATE_DEST/devstack
+$GATE_DEST/devstack-gate/devstack-vm-gate.sh
