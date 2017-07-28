@@ -16,9 +16,9 @@
 
 from glare_tempest_plugin import clients
 from tempest.common import credentials_factory as common_creds
-from tempest.common import dynamic_creds
 from tempest import config
 from tempest.lib import base
+from tempest.lib.common import dynamic_creds
 
 
 CONF = config.CONF
