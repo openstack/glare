@@ -12,3 +12,30 @@
 # WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 # License for the specific language governing permissions and limitations
 # under the License.
+
+sudo chmod -R a+rw /opt/stack/
+DEVSTACK_PATH="$BASE/new"
+(cd $DEVSTACK_PATH/glare/; sudo virtualenv .venv)
+. $DEVSTACK_PATH/glare/.venv/bin/activate
+
+(cd $DEVSTACK_PATH/tempest/; sudo pip install -r requirements.txt -r test-requirements.txt)
+
+(cd $DEVSTACK_PATH/tempest/; sudo oslo-config-generator --config-file etc/config-generator.tempest.conf --output-file etc/tempest.conf)
+(cd $DEVSTACK_PATH/; sudo sh -c 'cp -rf glare/glare_tempest_plugin/contrib/tempest.conf /etc/tempest.conf')
+
+sudo cp $DEVSTACK_PATH/tempest/etc/logging.conf.sample $DEVSTACK_PATH/tempest/etc/logging.conf
+
+(cd $DEVSTACK_PATH/glare/; sudo pip install -r requirements.txt -r test-requirements.txt)
+(cd $DEVSTACK_PATH/glare/; sudo python setup.py install)
+
+(cd $DEVSTACK_PATH/tempest/; sudo rm -rf .testrepository)
+(cd $DEVSTACK_PATH/tempest/; sudo testr init)
+
+echo "Listing existing Tempest tests"
+(cd $DEVSTACK_PATH/tempest/; sudo sh -c 'testr list-tests glare_tempest_plugin')
+(cd $DEVSTACK_PATH/tempest/; sudo sh -c 'testr list-tests glare_tempest_plugin | grep -E 'glare_tempest_plugin' > glare_tempest_plugin.list')
+echo "Next tests will be executed:"
+cat glare_tempest_plugin.list
+(cd $DEVSTACK_PATH/tempest/; sudo sh -c 'testr run --subunit --load-list=glare_tempest_plugin.list | subunit-trace --fails')
+
+echo "post_test_hook.sh executed"
