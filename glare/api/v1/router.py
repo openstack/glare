@@ -101,4 +101,44 @@ class API(wsgi.Router):
                        action='reject',
                        allowed_methods='GET, PUT, DELETE')
 
+        # ---quotas---
+        mapper.connect('/quotas/{project_id}',
+                       controller=glare_resource,
+                       action='create_quota',
+                       conditions={'method': ['POST']})
+        mapper.connect('/quotas/{project_id}',
+                       controller=glare_resource,
+                       action='get_project_quotas',
+                       conditions={'method': ['GET']},
+                       body_reject=True)
+        mapper.connect('/quotas/{project_id}',
+                       controller=reject_method_resource,
+                       action='reject',
+                       allowed_methods='POST, GET')
+
+        mapper.connect('/quotas/{project_id}/{quota_id}',
+                       controller=glare_resource,
+                       action='get_quota',
+                       conditions={'method': ['GET']},
+                       body_reject=True)
+        mapper.connect('/quotas/{project_id}/{quota_id}',
+                       controller=glare_resource,
+                       action='delete_quota',
+                       conditions={'method': ['DELETE']},
+                       body_reject=True)
+        mapper.connect('/quotas/{project_id}/{quota_id}',
+                       controller=reject_method_resource,
+                       action='reject',
+                       allowed_methods='GET, DELETE')
+
+        mapper.connect('/quotas/{project_id}/{quota_id}/{value}',
+                       controller=glare_resource,
+                       action='update_quota',
+                       conditions={'method': ['PUT']},
+                       body_reject=True)
+        mapper.connect('/quotas/{project_id}/{quota_id}/{value}',
+                       controller=reject_method_resource,
+                       action='reject',
+                       allowed_methods='PUT')
+
         super(API, self).__init__(mapper)
