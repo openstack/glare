@@ -18,7 +18,7 @@ from glare.common import exception
 from glare.tests.unit import base
 
 
-class TestQuotas(base.BaseTestArtifactAPI):
+class TestStaticQuotas(base.BaseTestArtifactAPI):
     """Test quota limits."""
 
     def test_count_artifact_number(self):
@@ -189,6 +189,228 @@ class TestQuotas(base.BaseTestArtifactAPI):
 
         # disable type limit and try upload data from user1 again
         self.config(max_uploaded_data=-1, group='artifact_type:images')
+        self.controller.upload_blob(
+            user1_req, 'images', img3['id'], 'image',
+            BytesIO(b'a' * 1000), 'application/octet-stream', 1000)
+
+
+class TestDynamicQuotas(base.BaseTestArtifactAPI):
+    """Test dynamic quota limits."""
+
+    def test_count_artifact_number(self):
+        user1_req = self.get_fake_request(self.users['user1'])
+        user2_req = self.get_fake_request(self.users['user2'])
+        # initially there are no artifacts
+        self.assertEqual(
+            0, len(self.controller.list(user1_req, 'all')['artifacts']))
+        self.assertEqual(
+            0, len(self.controller.list(user2_req, 'all')['artifacts']))
+
+        values = {
+            user1_req.context.tenant: {
+                "max_artifact_number:images": 3,
+                "max_artifact_number:heat_templates": 15,
+                "max_artifact_number:murano_packages": 10,
+                "max_artifact_number": 10
+            },
+            user2_req.context.tenant: {
+                "max_artifact_number": 10
+            }
+        }
+
+        admin_req = self.get_fake_request(self.users["admin"])
+        # define several quotas
+        self.controller.set_quotas(admin_req, values)
+
+        # create 3 images for user1
+        for i in range(3):
+            img = self.controller.create(
+                user1_req, 'images', {'name': 'img%d' % i})
+
+        # creation of another image fails because of artifact type limit
+        self.assertRaises(exception.Forbidden, self.controller.create,
+                          user1_req, 'images', {'name': 'img4'})
+
+        # create 7 murano packages
+        for i in range(7):
+            self.controller.create(
+                user1_req, 'murano_packages', {'name': 'mp%d' % i})
+
+        # creation of another package fails because of global limit
+        self.assertRaises(exception.Forbidden, self.controller.create,
+                          user1_req, 'murano_packages', {'name': 'mp8'})
+
+        # delete an image and create another murano package work
+        self.controller.delete(user1_req, 'images', img['id'])
+        self.controller.create(user1_req, 'murano_packages', {'name': 'mp8'})
+
+        # user2 can create his own artifacts
+        for i in range(10):
+            self.controller.create(
+                user2_req, 'heat_templates', {'name': 'ht%d' % i})
+
+        # creation of another heat template fails because of global limit
+        self.assertRaises(exception.Forbidden, self.controller.create,
+                          user2_req, 'heat_templates', {'name': 'ht11'})
+
+        # disable global limit for user1 and try to create 15 heat templates
+        values = {
+            user1_req.context.tenant: {
+                "max_artifact_number:images": 3,
+                "max_artifact_number:heat_templates": 15,
+                "max_artifact_number:murano_packages": 10,
+                "max_artifact_number": -1
+            }
+        }
+        self.controller.set_quotas(admin_req, values)
+
+        for i in range(15):
+            self.controller.create(
+                user1_req, 'heat_templates', {'name': 'ht%d' % i})
+
+        # creation of another heat template fails because of type limit
+        self.assertRaises(exception.Forbidden, self.controller.create,
+                          user1_req, 'heat_templates', {'name': 'ht16'})
+
+        # disable type limit for heat templates and create 1 heat templates
+        values = {
+            user1_req.context.tenant: {
+                "max_artifact_number:images": 3,
+                "max_artifact_number:heat_templates": -1,
+                "max_artifact_number:murano_packages": 10,
+                "max_artifact_number": -1
+            }
+        }
+        self.controller.set_quotas(admin_req, values)
+
+        # now user1 can create another heat template
+        self.controller.create(
+            user1_req, 'heat_templates', {'name': 'ht16'})
+
+    def test_calculate_uploaded_data(self):
+        user1_req = self.get_fake_request(self.users['user1'])
+        user2_req = self.get_fake_request(self.users['user2'])
+        # initially there are no artifacts
+        self.assertEqual(
+            0, len(self.controller.list(user1_req, 'all')['artifacts']))
+        self.assertEqual(
+            0, len(self.controller.list(user2_req, 'all')['artifacts']))
+
+        values = {
+            user1_req.context.tenant: {
+                "max_uploaded_data:images": 1500,
+                "max_uploaded_data:sample_artifact": 300,
+                "max_uploaded_data:murano_packages": 1000,
+                "max_uploaded_data": 1000
+            },
+            user2_req.context.tenant: {
+                "max_uploaded_data": 1000
+            }
+        }
+
+        admin_req = self.get_fake_request(self.users["admin"])
+        # define several quotas
+        self.controller.set_quotas(admin_req, values)
+        # create 2 sample artifacts for user 1
+        art1 = self.controller.create(
+            user1_req, 'sample_artifact', {'name': 'art1'})
+        art2 = self.controller.create(
+            user1_req, 'sample_artifact', {'name': 'art2'})
+
+        # create 3 images for user1
+        img1 = self.controller.create(
+            user1_req, 'images', {'name': 'img1'})
+        img2 = self.controller.create(
+            user1_req, 'images', {'name': 'img2'})
+        img3 = self.controller.create(
+            user1_req, 'images', {'name': 'img3'})
+
+        # upload to art1 fails now because of type limit
+        self.assertRaises(
+            exception.Forbidden, self.controller.upload_blob,
+            user1_req, 'sample_artifact', art1['id'], 'blob',
+            BytesIO(b'a' * 301), 'application/octet-stream', 301)
+
+        # upload to img1 fails now because of global limit
+        self.assertRaises(
+            exception.Forbidden, self.controller.upload_blob,
+            user1_req, 'images', img1['id'], 'image',
+            BytesIO(b'a' * 1001), 'application/octet-stream', 1001)
+
+        # upload 300 bytes to 'blob' of art1
+        self.controller.upload_blob(
+            user1_req, 'sample_artifact', art1['id'], 'blob',
+            BytesIO(b'a' * 300), 'application/octet-stream',
+            content_length=300)
+
+        # upload another blob to art1 fails because of type limit
+        self.assertRaises(
+            exception.Forbidden, self.controller.upload_blob,
+            user1_req, 'sample_artifact', art1['id'],
+            'dict_of_blobs/blob', BytesIO(b'a'),
+            'application/octet-stream', 1)
+
+        # upload to art2 fails now because of type limit
+        self.assertRaises(
+            exception.Forbidden, self.controller.upload_blob,
+            user1_req, 'sample_artifact', art2['id'], 'blob',
+            BytesIO(b'a'), 'application/octet-stream', 1)
+
+        # delete art1 and check that upload to art2 works
+        self.controller.delete(user1_req, 'sample_artifact', art1['id'])
+        self.controller.upload_blob(
+            user1_req, 'sample_artifact', art2['id'], 'blob',
+            BytesIO(b'a' * 300), 'application/octet-stream', 300)
+
+        # upload 700 bytes to img1 works
+        self.controller.upload_blob(
+            user1_req, 'images', img1['id'], 'image',
+            BytesIO(b'a' * 700), 'application/octet-stream', 700)
+
+        # upload to img2 fails because of global limit
+        self.assertRaises(
+            exception.Forbidden, self.controller.upload_blob,
+            user1_req, 'images', img2['id'], 'image',
+            BytesIO(b'a'), 'application/octet-stream', 1)
+
+        # user2 can upload data to images
+        img1 = self.controller.create(
+            user2_req, 'images', {'name': 'img1'})
+        self.controller.upload_blob(
+            user2_req, 'images', img1['id'], 'image',
+            BytesIO(b'a' * 1000), 'application/octet-stream', 1000)
+
+        # disable global limit and try upload data from user1 again
+        values = {
+            user1_req.context.tenant: {
+                "max_uploaded_data:images": 1500,
+                "max_uploaded_data:sample_artifact": 300,
+                "max_uploaded_data:murano_packages": 1000,
+                "max_uploaded_data": -1
+            }
+        }
+        self.controller.set_quotas(admin_req, values)
+
+        self.controller.upload_blob(
+            user1_req, 'images', img2['id'], 'image',
+            BytesIO(b'a' * 800), 'application/octet-stream', 800)
+
+        # uploading more fails because of image type limit
+        self.assertRaises(
+            exception.Forbidden, self.controller.upload_blob,
+            user1_req, 'images', img3['id'], 'image',
+            BytesIO(b'a'), 'application/octet-stream', 1)
+
+        # disable type limit and try upload data from user1 again
+        values = {
+            user1_req.context.tenant: {
+                "max_uploaded_data:images": -1,
+                "max_uploaded_data:sample_artifact": 300,
+                "max_uploaded_data:murano_packages": 1000,
+                "max_uploaded_data": -1
+            }
+        }
+        self.controller.set_quotas(admin_req, values)
         self.controller.upload_blob(
             user1_req, 'images', img3['id'], 'image',
             BytesIO(b'a' * 1000), 'application/octet-stream', 1000)
