@@ -443,13 +443,15 @@ class ArtifactsController(api_versioning.VersionedResource):
     def update_quota(self, req, project_id, quota_id, value):
         """Update quota record in Glare.
 
-        :param req: User request
+        :param req: user request
         :param project_id: id of the project for which to update the quota
         :param quota_id: id of quota to update
         :param value: new integer value
         :return: definition of updated quota
         """
-        if not type(value) is int:
+        try:
+            value = int(value)
+        except TypeError:
             msg = _("Quota value must be integer number.")
             raise exc.BadRequest(msg)
         return self.engine.update_quota(
@@ -460,7 +462,7 @@ class ArtifactsController(api_versioning.VersionedResource):
     def get_quota(self, req, project_id, quota_id):
         """Get detailed quota info.
 
-        :param req: User request
+        :param req: user request
         :param project_id: id of the project for which to show the quota
         :param quota_id: id of quota to show
         :return: definition of requested quota
@@ -472,7 +474,7 @@ class ArtifactsController(api_versioning.VersionedResource):
     def delete_quota(self, req, project_id, quota_id):
         """Delete quota from Glare.
 
-        :param req: User request
+        :param req: user request
         :param project_id: id of the project for which to delete the quota
         :param quota_id: id of quota to delete
         """
@@ -483,7 +485,7 @@ class ArtifactsController(api_versioning.VersionedResource):
     def get_project_quotas(self, req, project_id):
         """Get detailed info about all project quotas.
 
-        :param req: User request
+        :param req: user request
         :param project_id: id of the project for which to show the quotas
         :return: definition of requested quotas for the project
         """

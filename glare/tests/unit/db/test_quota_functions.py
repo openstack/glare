@@ -164,7 +164,7 @@ class TestQuotaFunctions(base.BaseTestArtifactAPI):
             value=10, session=self.session)
 
         # update quota with new parameters
-        q3 = api.update_quota(q3['id'], 20, self.session)
+        q3 = api.update_quota('project1', q3['id'], 20, self.session)
         self.assertEqual('project1', q3['project_id'])
         self.assertEqual('max_artifact_number', q3['quota_name'])
         self.assertEqual(20, q3['quota_value'])
@@ -172,17 +172,29 @@ class TestQuotaFunctions(base.BaseTestArtifactAPI):
         self.assertIsNotNone(q3['id'])
 
         # if quota doesn't exist - raise NotFound
-        self.assertRaises(exception.NotFound, api.update_quota,
+        self.assertRaises(exception.NotFound, api.update_quota, 'project1',
                           "INVALID_ID", 100, self.session)
 
+        # if quota doesn't exist for project - raise NotFound
+        self.assertRaises(exception.NotFound, api.update_quota,
+                          'INVALID_PROJECT', q3['id'], 100, self.session)
+
         # get quota information
-        q_get = api.get_quota(q3['id'], self.session)
+        q_get = api.get_quota('project1', q3['id'], self.session)
         self.assertEqual(q3, q_get)
 
-        # delete quota
-        api.delete_quota(q3['id'], self.session)
+        # if quota doesn't exist for project - raise NotFound
         self.assertRaises(exception.NotFound, api.get_quota,
-                          q3['id'], self.session)
+                          'INVALID_PROJECT', q3['id'], self.session)
+
+        # delete quota
+        api.delete_quota('project1', q3['id'], self.session)
+        self.assertRaises(exception.NotFound, api.get_quota,
+                          'project1', q3['id'], self.session)
+
+        # if quota doesn't exist for project - raise NotFound
+        self.assertRaises(exception.NotFound, api.delete_quota,
+                          'INVALID_PROJECT', q3['id'], self.session)
 
         # can create the the same quota again
         q3 = api.create_quota(project_id='project1',
@@ -196,7 +208,7 @@ class TestQuotaFunctions(base.BaseTestArtifactAPI):
 
         # deletion of non-existing quota fails
         self.assertRaises(exception.NotFound, api.delete_quota,
-                          "INVALID_ID", self.session)
+                          'project1', "INVALID_ID", self.session)
 
     def test_list_project_quotas(self):
         # create several quotas

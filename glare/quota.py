@@ -26,6 +26,16 @@ def verify_artifact_count(context, type_name):
     type_limit = getattr(
         CONF, 'artifact_type:' + type_name).max_artifact_number
 
+    # update limits if they were reassigned for project
+    project_id = context.tenant
+    quotas = get_project_quotas(project_id)
+    for q in quotas:
+        if q['quota_name'] == 'max_artifact_number':
+            if q['type_name'] is None:
+                global_limit = q['quota_value']
+            elif q['type_name'] == type_name:
+                type_limit = q['quota_value']
+
     session = api.get_session()
     # the whole amount of created artifacts
     whole_number = api.count_artifact_number(context, session)
@@ -57,6 +67,16 @@ def verify_uploaded_data_amount(context, type_name, data_amount):
     global_limit = CONF.max_uploaded_data
     type_limit = getattr(CONF, 'artifact_type:' + type_name).max_uploaded_data
 
+    # update limits if they were reassigned for project
+    project_id = context.tenant
+    quotas = get_project_quotas(project_id)
+    for q in quotas:
+        if q['quota_name'] == 'max_uploaded_data':
+            if q['type_name'] is None:
+                global_limit = q['quota_value']
+            elif q['type_name'] == type_name:
+                type_limit = q['quota_value']
+
     session = api.get_session()
     # the whole amount of created artifacts
     whole_number = api.calculate_uploaded_data(context, session)
@@ -85,3 +105,28 @@ def verify_uploaded_data_amount(context, type_name, data_amount):
                 'type_limit': type_limit,
                 'type_number': type_number}
             raise exception.Forbidden(msg)
+
+
+def create_quota(project_id, name, value, type_name=None):
+    session = api.get_session()
+    return api.create_quota(project_id, name, value, session, type_name)
+
+
+def update_quota(project_id, quota_id, value):
+    session = api.get_session()
+    return api.update_quota(project_id, quota_id, value, session)
+
+
+def get_quota(project_id, quota_id):
+    session = api.get_session()
+    return api.get_quota(project_id, quota_id, session)
+
+
+def delete_quota(project_id, quota_id):
+    session = api.get_session()
+    return api.delete_quota(project_id, quota_id, session)
+
+
+def get_project_quotas(project_id):
+    session = api.get_session()
+    return api.get_all_project_quotas(project_id, session)

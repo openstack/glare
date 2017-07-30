@@ -638,14 +638,17 @@ def create_quota(project_id, name, value, session, type_name=None):
 
 @retry(retry_on_exception=_retry_on_deadlock, wait_fixed=500,
        stop_max_attempt_number=50)
-def get_quota(quota_id, session):
+def get_quota(project_id, quota_id, session):
     """Get information about quota by its id."""
     with session.begin():
         try:
             quota = session.query(models.ArtifactQuota).filter(
-                models.ArtifactQuota.id == quota_id).one()
+                models.ArtifactQuota.id == quota_id).filter(
+                models.ArtifactQuota.project_id == project_id).one()
         except orm.exc.NoResultFound:
-            msg = _("Cannot find a quota with id %s.") % quota_id
+            msg = _("Cannot find a quota with id %(quota_id)s for project "
+                    "%(project_id)s.") % {'quota_id': quota_id,
+                                          'project_id': project_id}
             raise exception.NotFound(msg)
 
         return quota.to_dict()
@@ -653,14 +656,17 @@ def get_quota(quota_id, session):
 
 @retry(retry_on_exception=_retry_on_deadlock, wait_fixed=500,
        stop_max_attempt_number=50)
-def update_quota(quota_id, value, session):
+def update_quota(project_id, quota_id, value, session):
     """Update quota value in database."""
     with session.begin():
         try:
             quota = session.query(models.ArtifactQuota).filter(
-                models.ArtifactQuota.id == quota_id).one()
+                models.ArtifactQuota.id == quota_id).filter(
+                models.ArtifactQuota.project_id == project_id).one()
         except orm.exc.NoResultFound:
-            msg = _("Cannot find a quota with id %s.") % quota_id
+            msg = _("Cannot find a quota with id %(quota_id)s for project "
+                    "%(project_id)s.") % {'quota_id': quota_id,
+                                          'project_id': project_id}
             raise exception.NotFound(msg)
         if quota.quota_value != value:
             quota.quota_value = value
@@ -670,13 +676,16 @@ def update_quota(quota_id, value, session):
 
 @retry(retry_on_exception=_retry_on_deadlock, wait_fixed=500,
        stop_max_attempt_number=50)
-def delete_quota(quota_id, session):
+def delete_quota(project_id, quota_id, session):
     """Remove quota instance from database."""
     with session.begin():
         deleted = session.query(models.ArtifactQuota).filter(
-            models.ArtifactQuota.id == quota_id).delete()
+            models.ArtifactQuota.id == quota_id).filter(
+                models.ArtifactQuota.project_id == project_id).delete()
         if deleted == 0:
-            msg = _("Cannot find a quota with id %s.") % quota_id
+            msg = _("Cannot find a quota with id %(quota_id)s for project "
+                    "%(project_id)s.") % {'quota_id': quota_id,
+                                          'project_id': project_id}
             raise exception.NotFound(msg)
 
 
