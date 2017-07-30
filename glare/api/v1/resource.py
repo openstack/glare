@@ -203,6 +203,30 @@ class RequestDeserializer(api_versioning.VersionedResource,
                 'content_type': content_type,
                 'content_length': content_length}
 
+    @supported_versions(min_ver='1.1')
+    def create_quota(self, req):
+        self._get_content_type(req, expected=['application/json'])
+        body = self._get_request_body(req)
+        if not isinstance(body, dict):
+            msg = _("Dictionary expected as body value. Got %s.") % type(body)
+            raise exc.BadRequest(msg)
+        if not body.get('quota_name'):
+            msg = _("Quota name must be specified at creation.")
+            raise exc.BadRequest(msg)
+        if len(body['quota_name']) > 255:
+            msg = _("Quota name must shorter than 255 characters.")
+            raise exc.BadRequest(msg)
+        if not body.get('quota_value'):
+            msg = _("Quota value must be specified at creation.")
+            raise exc.BadRequest(msg)
+        if not type(body['quota_value']) is int or body['quota_value'] < 0:
+            msg = _("Quota value must be positive integer number.")
+            raise exc.BadRequest(msg)
+        if len(body.get('type_name', '')) > 255:
+            msg = _("Artifact type name must shorter than 255 characters.")
+            raise exc.BadRequest(msg)
+        return {'values': body}
+
 
 def log_request_progress(f):
     def log_decorator(self, req, *args, **kwargs):
@@ -401,6 +425,74 @@ class ArtifactsController(api_versioning.VersionedResource):
         return self.engine.delete_external_blob(
             req.context, type_name, artifact_id, field_name, blob_key)
 
+    @supported_versions(min_ver='1.1')
+    @log_request_progress
+    def create_quota(self, req, project_id, values):
+        """Create quota record in Glare.
+
+        :param req: user request
+        :param project_id: id of the project for which to create a quota
+        :param values: dict with quota values: quota name, quota value
+         and optional artifact type name
+        :return: definition of created quota
+        """
+        return self.engine.create_quota(req.context, project_id, values)
+
+    @supported_versions(min_ver='1.1')
+    @log_request_progress
+    def update_quota(self, req, project_id, quota_id, value):
+        """Update quota record in Glare.
+
+        :param req: user request
+        :param project_id: id of the project for which to update the quota
+        :param quota_id: id of quota to update
+        :param value: new integer value
+        :return: definition of updated quota
+        """
+        try:
+            value = int(value)
+            if value < 0:
+                raise TypeError
+        except TypeError:
+            msg = _("Quota value must be positive integer number.")
+            raise exc.BadRequest(msg)
+        return self.engine.update_quota(
+            req.context, project_id, quota_id, value)
+
+    @supported_versions(min_ver='1.1')
+    @log_request_progress
+    def get_quota(self, req, project_id, quota_id):
+        """Get detailed quota info.
+
+        :param req: user request
+        :param project_id: id of the project for which to show the quota
+        :param quota_id: id of quota to show
+        :return: definition of requested quota
+        """
+        return self.engine.get_quota(req.context, project_id, quota_id)
+
+    @supported_versions(min_ver='1.1')
+    @log_request_progress
+    def delete_quota(self, req, project_id, quota_id):
+        """Delete quota from Glare.
+
+        :param req: user request
+        :param project_id: id of the project for which to delete the quota
+        :param quota_id: id of quota to delete
+        """
+        return self.engine.delete_quota(req.context, project_id, quota_id)
+
+    @supported_versions(min_ver='1.1')
+    @log_request_progress
+    def get_project_quotas(self, req, project_id):
+        """Get detailed info about all project quotas.
+
+        :param req: user request
+        :param project_id: id of the project for which to show the quotas
+        :return: definition of requested quotas for the project
+        """
+        return self.engine.get_project_quotas(req.context, project_id)
+
 
 class ResponseSerializer(api_versioning.VersionedResource,
                          wsgi.JSONResponseSerializer):
@@ -510,6 +602,27 @@ class ResponseSerializer(api_versioning.VersionedResource,
     @supported_versions(min_ver='1.1')
     def delete_external_blob(self, response, result):
         self._prepare_json_response(response, result)
+
+    @supported_versions(min_ver='1.1')
+    def create_quota(self, response, quota):
+        self._prepare_json_response(response, quota)
+        response.status_int = http_client.CREATED
+
+    @supported_versions(min_ver='1.1')
+    def get_quota(self, response, quota):
+        self._prepare_json_response(response, quota)
+
+    @supported_versions(min_ver='1.1')
+    def update_quota(self, response, quota):
+        self._prepare_json_response(response, quota)
+
+    @supported_versions(min_ver='1.1')
+    def delete_quota(self, response, result):
+        response.status_int = http_client.NO_CONTENT
+
+    @supported_versions(min_ver='1.1')
+    def get_project_quotas(self, response, quotas_list):
+        self._prepare_json_response(response, quotas_list)
 
 
 def create_resource():
