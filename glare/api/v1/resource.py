@@ -196,17 +196,17 @@ class RequestDeserializer(api_versioning.VersionedResource,
         if not isinstance(body, dict):
             msg = _("Dictionary expected as body value. Got %s.") % type(body)
             raise exc.BadRequest(msg)
-        if not body.get('name'):
+        if not body.get('quota_name'):
             msg = _("Quota name must be specified at creation.")
             raise exc.BadRequest(msg)
-        if len(body['name']) > 255:
+        if len(body['quota_name']) > 255:
             msg = _("Quota name must shorter than 255 characters.")
             raise exc.BadRequest(msg)
-        if not body.get('value'):
+        if not body.get('quota_value'):
             msg = _("Quota value must be specified at creation.")
             raise exc.BadRequest(msg)
-        if not type(body['value']) is int:
-            msg = _("Quota value must be integer number.")
+        if not type(body['quota_value']) is int or body['quota_value'] < 0:
+            msg = _("Quota value must be positive integer number.")
             raise exc.BadRequest(msg)
         if len(body.get('type_name', '')) > 255:
             msg = _("Artifact type name must shorter than 255 characters.")
@@ -420,8 +420,10 @@ class ArtifactsController(api_versioning.VersionedResource):
         """
         try:
             value = int(value)
+            if value < 0:
+                raise TypeError
         except TypeError:
-            msg = _("Quota value must be integer number.")
+            msg = _("Quota value must be positive integer number.")
             raise exc.BadRequest(msg)
         return self.engine.update_quota(
             req.context, project_id, quota_id, value)

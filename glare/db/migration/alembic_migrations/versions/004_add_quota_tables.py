@@ -39,7 +39,7 @@ def upgrade():
         sa.Column('project_id', sa.String(255), nullable=False),
         sa.Column('quota_name', sa.String(32), nullable=False),
         sa.Column('quota_value', sa.BigInteger(), nullable=False),
-        sa.Column('type_name', sa.String(255), nullable=False),
+        sa.Column('type_name', sa.String(255), nullable=True),
         sa.PrimaryKeyConstraint('id'),
         mysql_engine=MYSQL_ENGINE,
         mysql_charset=MYSQL_CHARSET
