@@ -621,87 +621,45 @@ def _generate_quota_id(project_id, quota_name, type_name=None):
 @retry(retry_on_exception=_retry_on_deadlock, wait_fixed=500,
        stop_max_attempt_number=50)
 @utils.no_4byte_params
-def create_quota(project_id, quota_name, quota_value, session, type_name=None):
-    """Create new quota instance in database"""
+def set_quotas(values, session):
+    """Create new quota instances in database"""
     with session.begin():
-        quota = models.ArtifactQuota()
+        for project_id, project_quotas in values.items():
 
-        quota.project_id = project_id
-        quota.quota_name = quota_name
-        quota.quota_value = quota_value
-        quota.type_name = type_name
-        quota.id = _generate_quota_id(project_id, quota_name, type_name)
-        try:
-            quota.save(session)
-        except (sqlalchemy.exc.IntegrityError,
-                db_exception.DBDuplicateEntry):
-            msg = _("Cannot create quota with key %s. "
-                    "This quota already exists.") % quota.id
-            raise exception.Conflict(msg)
-        return quota.to_dict()
-
-
-@retry(retry_on_exception=_retry_on_deadlock, wait_fixed=500,
-       stop_max_attempt_number=50)
-def get_quota(project_id, quota_id, session):
-    """Get information about quota by its id."""
-    with session.begin():
-        try:
-            quota = session.query(models.ArtifactQuota).filter(
-                models.ArtifactQuota.id == quota_id).filter(
-                models.ArtifactQuota.project_id == project_id).one()
-        except orm.exc.NoResultFound:
-            msg = _("Cannot find a quota with id %(quota_id)s for project "
-                    "%(project_id)s.") % {'quota_id': quota_id,
-                                          'project_id': project_id}
-            raise exception.NotFound(msg)
-
-        return quota.to_dict()
-
-
-@retry(retry_on_exception=_retry_on_deadlock, wait_fixed=500,
-       stop_max_attempt_number=50)
-def update_quota(project_id, quota_id, quota_value, session):
-    """Update quota value in database."""
-    with session.begin():
-        try:
-            quota = session.query(models.ArtifactQuota).filter(
-                models.ArtifactQuota.id == quota_id).filter(
-                models.ArtifactQuota.project_id == project_id).one()
-        except orm.exc.NoResultFound:
-            msg = _("Cannot find a quota with id %(quota_id)s for project "
-                    "%(project_id)s.") % {'quota_id': quota_id,
-                                          'project_id': project_id}
-            raise exception.NotFound(msg)
-        if quota.quota_value != quota_value:
-            quota.quota_value = quota_value
-            quota.save(session)
-        return quota.to_dict()
-
-
-@retry(retry_on_exception=_retry_on_deadlock, wait_fixed=500,
-       stop_max_attempt_number=50)
-def delete_quota(project_id, quota_id, session):
-    """Remove quota instance from database."""
-    with session.begin():
-        deleted = session.query(models.ArtifactQuota).filter(
-            models.ArtifactQuota.id == quota_id).filter(
+            # reset all project quotas
+            session.query(models.ArtifactQuota).filter(
                 models.ArtifactQuota.project_id == project_id).delete()
-        if deleted == 0:
-            msg = _("Cannot find a quota with id %(quota_id)s for project "
-                    "%(project_id)s.") % {'quota_id': quota_id,
-                                          'project_id': project_id}
-            raise exception.NotFound(msg)
+
+            # generate new quotas
+            for quota_name, quota_value in project_quotas.items():
+                q = models.ArtifactQuota()
+                q.project_id = project_id
+                q.quota_name = quota_name
+                q.quota_value = quota_value
+                session.add(q)
+
+        # save all quotas
+        session.flush()
+
+    return values
 
 
 @retry(retry_on_exception=_retry_on_deadlock, wait_fixed=500,
        stop_max_attempt_number=50)
-def get_all_project_quotas(project_id, session):
-    """List all quotas for given user."""
-    query = session.query(models.ArtifactQuota).filter(
-        models.ArtifactQuota.project_id == project_id)
+def get_all_quotas(session, project_id=None):
+    """List all available quotas."""
+    query = session.query(models.ArtifactQuota)
+    if project_id is not None:
+        query = query.filter(
+            models.ArtifactQuota.project_id == project_id)
     quotas = query.order_by(models.ArtifactQuota.project_id).all()
-    return [q.to_dict() for q in quotas]
+
+    res = {}
+    for quota in quotas:
+        res.setdefault(
+            quota.project_id, {})[quota.quota_name] = quota.quota_value
+
+    return res
 
 
 @retry(retry_on_exception=_retry_on_deadlock, wait_fixed=500,

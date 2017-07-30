@@ -259,12 +259,10 @@ class ArtifactQuota(BASE, ArtifactBase):
     __tablename__ = 'glare_quotas'
     __table_args__ = (
         {'mysql_engine': 'InnoDB', 'mysql_charset': 'utf8'},)
-    id = Column(String(255), primary_key=True, nullable=False)
-    project_id = Column(String(255), nullable=False)
-    quota_name = Column(String(32), nullable=False)
+    project_id = Column(String(255), primary_key=True)
+    quota_name = Column(String(32), primary_key=True)
     quota_value = Column(BigInteger().with_variant(Integer, "sqlite"),
                          nullable=False)
-    type_name = Column(String(255))
 
 
 def register_models(engine):

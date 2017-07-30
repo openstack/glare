@@ -35,12 +35,10 @@ MYSQL_CHARSET = 'utf8'
 def upgrade():
     op.create_table(
         'glare_quotas',
-        sa.Column('id', sa.String(255), primary_key=True, nullable=False),
-        sa.Column('project_id', sa.String(255), nullable=False),
-        sa.Column('quota_name', sa.String(32), nullable=False),
+        sa.Column('project_id', sa.String(255), primary_key=True),
+        sa.Column('quota_name', sa.String(32), primary_key=True),
         sa.Column('quota_value', sa.BigInteger(), nullable=False),
-        sa.Column('type_name', sa.String(255), nullable=True),
-        sa.PrimaryKeyConstraint('id'),
+        sa.PrimaryKeyConstraint('project_id', 'quota_name'),
         mysql_engine=MYSQL_ENGINE,
         mysql_charset=MYSQL_CHARSET
     )

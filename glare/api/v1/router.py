@@ -102,43 +102,28 @@ class API(wsgi.Router):
                        allowed_methods='GET, PUT, DELETE')
 
         # ---quotas---
+        mapper.connect('/quotas',
+                       controller=glare_resource,
+                       action='set_quotas',
+                       conditions={'method': ['PUT']})
+        mapper.connect('/quotas',
+                       controller=glare_resource,
+                       action='list_all_quotas',
+                       conditions={'method': ['GET']},
+                       body_reject=True)
+        mapper.connect('/quotas',
+                       controller=reject_method_resource,
+                       action='reject',
+                       allowed_methods='PUT, GET')
+
         mapper.connect('/quotas/{project_id}',
                        controller=glare_resource,
-                       action='create_quota',
-                       conditions={'method': ['POST']})
-        mapper.connect('/quotas/{project_id}',
-                       controller=glare_resource,
-                       action='get_project_quotas',
+                       action='list_project_quotas',
                        conditions={'method': ['GET']},
                        body_reject=True)
         mapper.connect('/quotas/{project_id}',
                        controller=reject_method_resource,
                        action='reject',
-                       allowed_methods='POST, GET')
-
-        mapper.connect('/quotas/{project_id}/{quota_id}',
-                       controller=glare_resource,
-                       action='get_quota',
-                       conditions={'method': ['GET']},
-                       body_reject=True)
-        mapper.connect('/quotas/{project_id}/{quota_id}',
-                       controller=glare_resource,
-                       action='delete_quota',
-                       conditions={'method': ['DELETE']},
-                       body_reject=True)
-        mapper.connect('/quotas/{project_id}/{quota_id}',
-                       controller=reject_method_resource,
-                       action='reject',
-                       allowed_methods='GET, DELETE')
-
-        mapper.connect('/quotas/{project_id}/{quota_id}/{value}',
-                       controller=glare_resource,
-                       action='update_quota',
-                       conditions={'method': ['PUT']},
-                       body_reject=True)
-        mapper.connect('/quotas/{project_id}/{quota_id}/{value}',
-                       controller=reject_method_resource,
-                       action='reject',
-                       allowed_methods='PUT')
+                       allowed_methods='GET')
 
         super(API, self).__init__(mapper)

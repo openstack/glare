@@ -14,7 +14,6 @@
 
 from six import BytesIO
 
-from glare.common import exception
 from glare.db.sqlalchemy import api
 from glare.tests.unit import base
 
@@ -129,124 +128,48 @@ class TestQuotaFunctions(base.BaseTestArtifactAPI):
         self.assertEqual(
             1000, api.calculate_uploaded_data(req.context, self.session))
 
-    def test_quota_crud_db_operations(self):
+    def test_quota_operations(self):
         # create several quotas
-        q1 = api.create_quota(project_id='project1',
-                              quota_name='max_uploaded_data',
-                              quota_value=1000, session=self.session)
-        self.assertEqual('project1', q1['project_id'])
-        self.assertEqual('max_uploaded_data', q1['quota_name'])
-        self.assertEqual(1000, q1['quota_value'])
-        self.assertIsNone(q1['type_name'])
-        self.assertIsNotNone(q1['id'])
-        q2 = api.create_quota(project_id='project1',
-                              quota_name='max_uploaded_data',
-                              quota_value=500,
-                              type_name='images', session=self.session)
-        self.assertEqual('project1', q2['project_id'])
-        self.assertEqual('max_uploaded_data', q2['quota_name'])
-        self.assertEqual(500, q2['quota_value'])
-        self.assertEqual('images', q2['type_name'])
-        self.assertIsNotNone(q2['id'])
-        q3 = api.create_quota(project_id='project1',
-                              quota_name='max_artifact_number',
-                              quota_value=10, session=self.session)
-        self.assertEqual('project1', q3['project_id'])
-        self.assertEqual('max_artifact_number', q3['quota_name'])
-        self.assertEqual(10, q3['quota_value'])
-        self.assertIsNone(q3['type_name'])
-        self.assertIsNotNone(q3['id'])
+        values = {
+            "project1": {
+                "max_uploaded_data": 1000,
+                "max_uploaded_data:images": 500,
+                "max_artifact_number": 10
+            },
+            "project2": {
+                "max_uploaded_data": 1000,
+                "max_uploaded_data:sample_artifact": 500,
+                "max_artifact_number": 20
+            },
+            "project3": {
+                "max_uploaded_data": 1000
+            }
+        }
 
-        # creation of another quota with the same parameters fails
-        self.assertRaises(
-            exception.Conflict, api.create_quota,
-            project_id='project1', quota_name='max_artifact_number',
-            quota_value=10, session=self.session)
+        res = api.set_quotas(values, self.session)
+        self.assertEqual(values, res)
 
-        # update quota with new parameters
-        q3 = api.update_quota('project1', q3['id'], 20, self.session)
-        self.assertEqual('project1', q3['project_id'])
-        self.assertEqual('max_artifact_number', q3['quota_name'])
-        self.assertEqual(20, q3['quota_value'])
-        self.assertIsNone(q1['type_name'])
-        self.assertIsNotNone(q3['id'])
+        res = api.get_all_quotas(self.session)
+        self.assertEqual(values, res)
 
-        # if quota doesn't exist - raise NotFound
-        self.assertRaises(exception.NotFound, api.update_quota, 'project1',
-                          "INVALID_ID", 100, self.session)
+        # Redefine quotas
+        new_values = {
+            "project1": {
+                "max_uploaded_data": 200,
+                "max_uploaded_data:images": 1000,
+                "max_artifact_number": 30,
+                "max_artifact_number:images": 20
+            },
+            "project2": {},
+        }
 
-        # if quota doesn't exist for project - raise NotFound
-        self.assertRaises(exception.NotFound, api.update_quota,
-                          'INVALID_PROJECT', q3['id'], 100, self.session)
+        res = api.set_quotas(new_values, self.session)
+        self.assertEqual(new_values, res)
 
-        # get quota information
-        q_get = api.get_quota('project1', q3['id'], self.session)
-        self.assertEqual(q3, q_get)
+        # project3 should remain unchanged
+        new_values['project3'] = {"max_uploaded_data": 1000}
+        # project 2 quotas removed
+        new_values.pop('project2')
 
-        # if quota doesn't exist for project - raise NotFound
-        self.assertRaises(exception.NotFound, api.get_quota,
-                          'INVALID_PROJECT', q3['id'], self.session)
-
-        # delete quota
-        api.delete_quota('project1', q3['id'], self.session)
-        self.assertRaises(exception.NotFound, api.get_quota,
-                          'project1', q3['id'], self.session)
-
-        # if quota doesn't exist for project - raise NotFound
-        self.assertRaises(exception.NotFound, api.delete_quota,
-                          'INVALID_PROJECT', q3['id'], self.session)
-
-        # can create the the same quota again
-        q3 = api.create_quota(project_id='project1',
-                              quota_name='max_artifact_number',
-                              quota_value=10, session=self.session)
-        self.assertEqual('project1', q3['project_id'])
-        self.assertEqual('max_artifact_number', q3['quota_name'])
-        self.assertEqual(10, q3['quota_value'])
-        self.assertIsNone(q3['type_name'])
-        self.assertIsNotNone(q3['id'])
-
-        # deletion of non-existing quota fails
-        self.assertRaises(exception.NotFound, api.delete_quota,
-                          'project1', "INVALID_ID", self.session)
-
-    def test_list_project_quotas(self):
-        # create several quotas
-        q1 = api.create_quota(project_id='project1',
-                              quota_name='max_uploaded_data',
-                              quota_value=1000, session=self.session)
-        q2 = api.create_quota(project_id='project1',
-                              quota_name='max_uploaded_data',
-                              quota_value=500,
-                              type_name='images', session=self.session)
-        q3 = api.create_quota(project_id='project1',
-                              quota_name='max_artifact_number',
-                              quota_value=10, session=self.session)
-        q4 = api.create_quota(project_id='project2',
-                              quota_name='max_uploaded_data',
-                              quota_value=1000, session=self.session)
-        q5 = api.create_quota(project_id='project2',
-                              quota_name='max_uploaded_data',
-                              quota_value=500,
-                              type_name='sample_artifact',
-                              session=self.session)
-        q6 = api.create_quota(project_id='project2',
-                              quota_name='max_artifact_number',
-                              quota_value=20, session=self.session)
-        q7 = api.create_quota(project_id='project3',
-                              quota_name='max_uploaded_data',
-                              quota_value=1000, session=self.session)
-
-        project1_quotas = api.get_all_project_quotas('project1', self.session)
-        self.assertEqual(3, len(project1_quotas))
-        for q in (q1, q2, q3):
-            self.assertIn(q, project1_quotas)
-
-        project2_quotas = api.get_all_project_quotas('project2', self.session)
-        self.assertEqual(3, len(project2_quotas))
-        for q in (q4, q5, q6):
-            self.assertIn(q, project2_quotas)
-
-        project3_quotas = api.get_all_project_quotas('project3', self.session)
-        self.assertEqual(1, len(project3_quotas))
-        self.assertIn(q7, project3_quotas)
+        res = api.get_all_quotas(self.session)
+        self.assertEqual(new_values, res)

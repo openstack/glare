@@ -240,14 +240,12 @@ class GlareMigrationsCheckers(object):
                           locks_columns)
 
     def _check_004(self, engine, data):
-        locks_indices = []
-        locks_columns = ['id',
-                         'project_id',
+        quota_indices = []
+        quota_columns = ['project_id',
                          'quota_name',
-                         'quota_value',
-                         'type_name']
-        self.assert_table(engine, 'glare_quotas', locks_indices,
-                          locks_columns)
+                         'quota_value']
+        self.assert_table(engine, 'glare_quotas', quota_indices,
+                          quota_columns)
 
 
 class TestMigrationsMySQL(GlareMigrationsCheckers,
