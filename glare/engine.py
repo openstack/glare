@@ -609,3 +609,81 @@ class Engine(object):
                 os.remove(path)
 
         return data, meta
+
+    @staticmethod
+    def create_quota(context, project_id, values):
+        """Create quota record in Glare.
+
+        :param context: user request context
+        :param project_id: id of the project for which to create a quota
+        :param values: dict with quota values: quota name, quota value
+         and optional artifact type name
+        :return: definition of created quota
+        """
+        action_name = "artifact:create_quota"
+        policy.authorize(action_name, {'project_id': project_id}, context)
+        quota_name = values['quota_name']
+        quota_value = values['quota_value']
+        type_name = values.get('type_name')
+        q = quota.create_quota(project_id, quota_name, quota_value, type_name)
+        Notifier.notify(context, action_name, q)
+        return q
+
+    @staticmethod
+    def update_quota(context, project_id, quota_id, quota_value):
+        """Update quota record in Glare.
+
+        :param context: user request context
+        :param project_id: id of the project for which to update the quota
+        :param quota_id: id of quota to update
+        :param value: new integer value
+        :return: definition of updated quota
+        """
+        action_name = "artifact:update_quota"
+        policy.authorize(action_name, {'project_id': project_id}, context)
+        q = quota.update_quota(project_id, quota_id, quota_value)
+        Notifier.notify(context, action_name, q)
+        return q
+
+    @staticmethod
+    def get_quota(context, project_id, quota_id):
+        """Get detailed quota info.
+
+        :param context: user request context
+        :param project_id: id of the project for which to show the quota
+        :param quota_id: id of quota to show
+        :return: definition of requested quota
+        """
+        action_name = "artifact:get_quota"
+        policy.authorize(action_name, {'project_id': project_id}, context)
+        q = quota.get_quota(project_id, quota_id)
+        Notifier.notify(context, action_name, q)
+        return q
+
+    @staticmethod
+    def delete_quota(context, project_id, quota_id):
+        """Delete quota from Glare.
+
+        :param context: user request context
+        :param project_id: id of the project for which to delete the quota
+        :param quota_id: id of quota to delete
+        """
+        action_name = "artifact:delete_quota"
+        policy.authorize(action_name, {'project_id': project_id}, context)
+        q = quota.delete_quota(project_id, quota_id)
+        Notifier.notify(context, action_name, q)
+        return q
+
+    @staticmethod
+    def get_project_quotas(context, project_id):
+        """Get detailed info about all project quotas.
+
+        :param context: user request context
+        :param project_id: id of the project for which to show the quotas
+        :return: definition of requested quotas for the project
+        """
+        action_name = "artifact:get_quota"
+        policy.authorize(action_name, {'project_id': project_id}, context)
+        q = quota.get_project_quotas(project_id)
+        Notifier.notify(context, action_name, q)
+        return q
