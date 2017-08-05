@@ -51,3 +51,6 @@ def fix_greendns_ipv6():
 
 i18n.enable_lazy()
 fix_greendns_ipv6()
+
+
+# no-op test
