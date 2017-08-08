@@ -23,10 +23,14 @@ import os
 import sys
 
 import eventlet
-from oslo_utils import encodeutils
+if os.name == 'nt':
+    # eventlet monkey patching causes subprocess.Popen to fail on Windows
+    # when using pipes due to missing non blocking I/O support
+    eventlet.monkey_patch(os=False)
+else:
+    eventlet.monkey_patch()
 
-eventlet.patcher.monkey_patch(all=False, socket=True, time=True,
-                              select=True, thread=True, os=True)
+from oslo_utils import encodeutils
 
 # If ../glare/__init__.py exists, add ../ to Python search path, so that
 # it will override what happens to be installed in /usr/(local/)lib/python...
