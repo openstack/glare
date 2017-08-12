@@ -215,6 +215,15 @@ def set_eventlet_hub():
 def initialize_glance_store():
     """Initialize glance store."""
     glance_store.register_opts(CONF)
+    # By default glance and glare will share common place to store data.
+    # To prevent possible collisions we have to set other glance_store default
+    # values.
+    CONF.set_default('filesystem_store_datadir', '/var/lib/glare/artifacts',
+                     group='glance_store')
+    CONF.set_default('rbd_store_pool', 'artifacts', group='glance_store')
+    CONF.set_default('vmware_store_image_dir', '/openstack_glare',
+                     group='glance_store')
+    CONF.set_default('swift_store_container', 'glare', group='glance_store')
     glance_store.create_stores(CONF)
     glance_store.verify_default_store()
 
