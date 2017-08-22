@@ -23,10 +23,12 @@ from oslo_utils import timeutils
 from oslo_utils import uuidutils
 import six.moves.urllib.parse as urlparse
 
+from glare.async import teskflow_executor
 from glare.common import exception
 from glare.common import policy
 from glare.common import store_api
 from glare.common import utils
+from glare.common import wsgi
 from glare.db import artifact_api
 from glare.i18n import _
 from glare import locking
@@ -403,19 +405,6 @@ class Engine(object):
             return getattr(af, field_name, None)
 
     @staticmethod
-    def _save_blob_info(context, af, field_name, blob_key, value):
-        """Save blob instance in database."""
-        if blob_key is not None:
-            # Insert blob value in the folder
-            folder = getattr(af, field_name)
-            if value is not None:
-                folder[blob_key] = value
-            else:
-                del folder[blob_key]
-            value = folder
-        return af.update_blob(context, af.id, field_name, value)
-
-    @staticmethod
     def _generate_blob_name(field_name, blob_key=None):
         return "%s[%s]" % (field_name, blob_key) if blob_key else field_name
 
@@ -469,8 +458,7 @@ class Engine(object):
             utils.validate_change_allowed(af, field_name)
             af.pre_add_location_hook(
                 context, af, field_name, location, blob_key)
-            modified_af = self._save_blob_info(
-                context, af, field_name, blob_key, blob)
+            modified_af = af.save_blob(context, field_name, blob_key, blob)
 
         LOG.info("External location %(location)s has been created "
                  "successfully for artifact %(artifact)s blob %(blob)s",
@@ -524,6 +512,24 @@ class Engine(object):
 
         return size
 
+    def _register_blob(self, context, type_name, artifact_id, field_name,
+                       blob_info, content_length=None, blob_key=None):
+        with self.lock_engine.acquire(context,
+                                      "%s:%s" % (type_name, artifact_id)):
+            af = self._show_artifact(context, type_name, artifact_id)
+            policy.authorize("artifact:upload", af.to_dict(), context)
+
+            # create an an empty blob instance in db with 'saving' status
+            if self._get_blob_info(af, field_name, blob_key):
+                msg = _("Blob %(blob)s already exists for artifact "
+                        "%(af)s") % {'blob': field_name, 'af': af.id}
+                raise exception.Conflict(message=msg)
+            utils.validate_change_allowed(af, field_name)
+            blob_info['size'] = self._calculate_allowed_space(
+                context, af, field_name, content_length, blob_key)
+
+            return af.save_blob(context, field_name, blob_key, blob_info)
+
     def upload_blob(self, context, type_name, artifact_id, field_name, fd,
                     content_type, content_length=None, blob_key=None):
         """Upload Artifact blob.
@@ -541,71 +547,52 @@ class Engine(object):
         """
         blob_name = self._generate_blob_name(field_name, blob_key)
         blob_id = uuidutils.generate_uuid()
+        blob = {'url': None, 'size': None, 'md5': None, 'sha1': None,
+                'sha256': None, 'id': blob_id, 'status': 'saving',
+                'external': False, 'content_type': content_type}
 
-        lock_key = "%s:%s" % (type_name, artifact_id)
-        with self.lock_engine.acquire(context, lock_key):
-            af = self._show_artifact(context, type_name, artifact_id)
-            action_name = "artifact:upload"
-            policy.authorize(action_name, af.to_dict(), context)
-
-            # create an an empty blob instance in db with 'saving' status
-            if self._get_blob_info(af, field_name, blob_key):
-                msg = _("Blob %(blob)s already exists for artifact "
-                        "%(af)s") % {'blob': field_name, 'af': af.id}
-                raise exception.Conflict(message=msg)
-            utils.validate_change_allowed(af, field_name)
-            size = self._calculate_allowed_space(
-                context, af, field_name, content_length, blob_key)
-            blob = {'url': None, 'size': size, 'md5': None, 'sha1': None,
-                    'sha256': None, 'id': blob_id, 'status': 'saving',
-                    'external': False, 'content_type': content_type}
-
-            modified_af = self._save_blob_info(
-                context, af, field_name, blob_key, blob)
+        af = self._register_blob(
+            context, type_name, artifact_id, field_name, blob,
+            content_length, blob_key)
 
         LOG.debug("Parameters validation for artifact %(artifact)s blob "
                   "upload passed for blob %(blob_name)s. "
                   "Start blob uploading to backend.",
                   {'artifact': af.id, 'blob_name': blob_name})
 
-        # try to perform blob uploading to storage
-        try:
+        upload_workflow = af.get_upload_workflow(field_name)
+        # Now we have to choose between 3 possible upload workflow types
+        if upload_workflow == 'direct':
+            # do nothing
+            pass
+        elif upload_workflow == 'sync':
+            # upload data to temporary inmemory file and run upload hook
+            fd = utils.create_inmemory_file(fd)
             try:
                 # call upload hook first
-                if hasattr(af, 'validate_upload'):
-                    LOG.warning("Method 'validate_upload' was deprecated. "
-                                "Please use 'pre_upload_hook' instead.")
-                    fd, path = af.validate_upload(context, af, field_name, fd)
-                else:
-                    fd = af.pre_upload_hook(
-                        context, af, field_name, blob_key, fd)
+                fd = af.pre_upload_hook(context, af, field_name, blob_key, fd)
             except exception.GlareException:
-                raise
+                # if upload failed remove blob from db and storage
+                with excutils.save_and_reraise_exception(logger=LOG):
+                    af.save_blob(context, field_name, blob_key, None)
             except Exception as e:
+                af.save_blob(context, field_name, blob_key, None)
                 raise exception.BadRequest(message=str(e))
-
-            default_store = getattr(
-                CONF, 'artifact_type:' + type_name).default_store
-            # use global parameter if default store isn't set per artifact type
-            if default_store is None:
-                default_store = CONF.glance_store.default_store
-
-            location_uri, size, checksums = store_api.save_blob_to_store(
-                blob_id, fd, context, size,
-                store_type=default_store)
-        except Exception:
-            # if upload failed remove blob from db and storage
-            with excutils.save_and_reraise_exception(logger=LOG):
-                if blob_key is None:
-                    af.update_blob(context, af.id, field_name, None)
-                else:
-                    blob_dict_attr = getattr(modified_af, field_name)
-                    del blob_dict_attr[blob_key]
-                    af.update_blob(context, af.id, field_name, blob_dict_attr)
+        elif upload_workflow == 'async':
+            # run asynchronous upload hook and get taskflow object
+            executor = teskflow_executor.FlowExecutor(
+                context, af, field_name, blob_key, fd, blob, blob_id
+            )
+            pool = wsgi.get_thread_pool("flows_eventlet_pool")
+            pool.spawn_n(executor.run)
+            return executor.flow_id
 
         LOG.info("Successfully finished blob uploading for artifact "
                  "%(artifact)s blob field %(blob)s.",
                  {'artifact': af.id, 'blob': blob_name})
+
+        location_uri, size, checksums = store_api.save_blob_to_store(
+            context, af, field_name, blob_key, fd, blob, blob_id)
 
         # update blob info and activate it
         blob.update({'url': location_uri,
@@ -613,15 +600,15 @@ class Engine(object):
                      'size': size})
         blob.update(checksums)
 
-        with self.lock_engine.acquire(context, lock_key):
+        with self.lock_engine.acquire(context,
+                                      "%s:%s" % (type_name, artifact_id)):
             af = af.show(context, artifact_id)
-            modified_af = self._save_blob_info(
-                context, af, field_name, blob_key, blob)
+            modified_af = af.save_blob(context, field_name, blob_key, blob)
 
         modified_af.post_upload_hook(
             context, modified_af, field_name, blob_key)
 
-        Notifier.notify(context, action_name, modified_af)
+        Notifier.notify(context, "artifact:upload", modified_af)
         return modified_af.to_dict()
 
     def download_blob(self, context, type_name, artifact_id, field_name,
@@ -703,8 +690,7 @@ class Engine(object):
             msg = _("Blob %s is not external") % blob_name
             raise exception.Forbidden(message=msg)
 
-        modified_af = self._save_blob_info(
-            context, af, field_name, blob_key, None)
+        modified_af = af.save_blob(context, field_name, blob_key, None)
 
         Notifier.notify(context, action_name, modified_af)
         return modified_af.to_dict()

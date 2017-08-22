@@ -240,22 +240,28 @@ class DictField(CompoundField):
 
 
 class BlobField(Field):
-    def __init__(self, max_blob_size=DEFAULT_MAX_BLOB_SIZE, **kwargs):
+    def __init__(self, max_blob_size=DEFAULT_MAX_BLOB_SIZE,
+                 upload_workflow='direct', **kwargs):
         super(BlobField, self).__init__(
             field_class=glare_fields.BlobField, **kwargs)
         self.max_blob_size = int(max_blob_size)
+        self.upload_workflow = upload_workflow
         self.field_props.append('max_blob_size')
+        self.field_props.append('upload_workflow')
 
 
 class FolderField(DictField):
     def __init__(self, max_blob_size=DEFAULT_MAX_BLOB_SIZE,
-                 max_folder_size=DEFAULT_MAX_FOLDER_SIZE, **kwargs):
+                 max_folder_size=DEFAULT_MAX_FOLDER_SIZE,
+                 upload_workflow='direct', **kwargs):
         super(FolderField, self).__init__(
             element_type=glare_fields.BlobFieldType, **kwargs)
         self.max_blob_size = int(max_blob_size)
         self.max_folder_size = int(max_folder_size)
+        self.upload_workflow = upload_workflow
         self.field_props.append('max_blob_size')
         self.field_props.append('max_folder_size')
+        self.field_props.append('upload_workflow')
 
 # Classes below added for backward compatibility. They shouldn't be used
 

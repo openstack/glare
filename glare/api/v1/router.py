@@ -135,4 +135,29 @@ class API(wsgi.Router):
                        action='reject',
                        allowed_methods='GET')
 
+        # ---flows---
+        mapper.connect('/flows',
+                       controller=glare_resource,
+                       action='list_flows',
+                       conditions={'method': ['GET']},
+                       body_reject=True)
+        mapper.connect('/flows',
+                       controller=reject_method_resource,
+                       action='reject',
+                       allowed_methods='GET')
+        mapper.connect('/flows/{flow_id}',
+                       controller=glare_resource,
+                       action='show_flow',
+                       conditions={'method': ['GET']},
+                       body_reject=True)
+        mapper.connect('/flows/{flow_id}',
+                       controller=glare_resource,
+                       action='delete_flow',
+                       conditions={'method': ['DELETE']},
+                       body_reject=True)
+        mapper.connect('/flows/{flow_id}',
+                       controller=reject_method_resource,
+                       action='reject',
+                       allowed_methods='GET, DELETE')
+
         super(API, self).__init__(mapper)

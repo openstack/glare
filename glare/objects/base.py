@@ -466,17 +466,32 @@ Possible values:
         return getattr(cls.fields[field_name], 'max_folder_size')
 
     @classmethod
-    def update_blob(cls, context, af_id, field_name, values):
+    def get_upload_workflow(cls, field_name):
+        """Get upload workflow type.
+
+        :param field_name: blob or blob dict field name
+        :return: upload workflow type: one of 'direct', 'sync', 'async'
+        """
+        return getattr(cls.fields[field_name], 'upload_workflow')
+
+    def save_blob(self, context, field_name, blob_key, value):
         """Update blob info in database.
 
         :param context: user context
-        :param af_id: id of modified artifact
         :param field_name: blob or blob dict field name
-        :param values: updated blob values
+        :param value: updated blob values
         :return: updated artifact definition in Glare
         """
-        af_upd = cls.db_api.update_blob(context, af_id, {field_name: values})
-        return cls.init_artifact(context, af_upd)
+        if blob_key is not None:
+            # Insert blob value in the folder
+            folder = getattr(self, field_name)
+            if value is not None:
+                folder[blob_key] = value
+            else:
+                del folder[blob_key]
+            value = folder
+        af_upd = self.db_api.update_blob(context, self.id, {field_name: value})
+        return self.init_artifact(context, af_upd)
 
     # Next comes a collection of hooks for various operations
 

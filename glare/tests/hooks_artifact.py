@@ -63,7 +63,7 @@ class HookChecker(base.BaseArtifact):
             mutable=True),
         'blob': Blob(
             required_on_activate=False,
-            mutable=True)
+            mutable=True, upload_workflow='sync')
     }
 
     artifact_type_opts = [

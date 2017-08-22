@@ -33,7 +33,8 @@ class SampleArtifact(base_artifact.BaseArtifact):
 
     fields = {
         'blob': Blob(required_on_activate=False, mutable=True,
-                     description="I am Blob"),
+                     description="I am Blob",
+                     upload_workflow='sync'),
         'small_blob': Blob(max_blob_size=10, required_on_activate=False,
                            mutable=True),
         'link1': Field(glare_fields.Link,
@@ -89,6 +90,7 @@ class SampleArtifact(base_artifact.BaseArtifact):
                               filter_ops=(wrappers.FILTER_EQ,)),
         'dict_of_blobs': Folder(required_on_activate=False,
                                 max_folder_size=2000,
+                                upload_workflow='sync',
                                 validators=[
                                     validators.MaxDictKeyLen(1000)]),
         'string_mutable': Field(fields.StringField,

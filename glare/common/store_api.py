@@ -16,6 +16,7 @@ from glance_store import backend
 from glance_store import exceptions as store_exc
 from oslo_config import cfg
 from oslo_log import log as logging
+from oslo_utils import excutils
 
 from glare.common import exception
 from glare.common import utils
@@ -62,8 +63,8 @@ error_map = [{'catch': store_exc.NotFound,
 
 
 @utils.error_handler(error_map)
-def save_blob_to_store(blob_id, blob, context, max_size,
-                       store_type=None, verifier=None):
+def _save_blob_to_store(blob_id, blob, context, max_size,
+                        store_type=None, verifier=None):
     """Save file to specified store type and return location info to the user.
 
     :param store_type: type of the store, None means save to default store.
@@ -135,3 +136,22 @@ def read_data(flobj, limit=16777216):
             raise exception.RequestEntityTooLarge()
         data += chunk
     return data
+
+
+def save_blob_to_store(
+        context, af, field_name, blob_key, fd, blob_info, blob_id):
+    # try to perform blob uploading to storage
+    try:
+        default_store = getattr(
+            CONF, 'artifact_type:' + af.get_type_name()).default_store
+        # use global parameter if default store isn't set per artifact type
+        if default_store is None:
+            default_store = CONF.glance_store.default_store
+
+        return _save_blob_to_store(
+            blob_id, fd, context, blob_info['size'],
+            store_type=default_store)
+    except Exception:
+        # if upload failed remove blob from db and storage
+        with excutils.save_and_reraise_exception(logger=LOG):
+            af.save_blob(context, field_name, blob_key, None)

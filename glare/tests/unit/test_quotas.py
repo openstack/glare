@@ -451,8 +451,8 @@ class TestDynamicQuotas(base.BaseTestArtifactAPI):
         # amount exceeds this limit RequestEntityTooLarge is raised and
         # upload fails.
         with mock.patch(
-                'glare.common.store_api.save_blob_to_store',
-                side_effect=store_api.save_blob_to_store) as mocked_save:
+                'glare.common.store_api._save_blob_to_store',
+                side_effect=store_api._save_blob_to_store) as mocked_save:
             data = BytesIO(b'a' * 10)
             self.assertRaises(
                 exception.RequestEntityTooLarge,
@@ -470,8 +470,8 @@ class TestDynamicQuotas(base.BaseTestArtifactAPI):
 
         # try to upload with smaller amount that doesn't exceeds quota
         with mock.patch(
-                'glare.common.store_api.save_blob_to_store',
-                side_effect=store_api.save_blob_to_store) as mocked_save:
+                'glare.common.store_api._save_blob_to_store',
+                side_effect=store_api._save_blob_to_store) as mocked_save:
             data = BytesIO(b'a' * 4)
             self.controller.upload_blob(
                 user1_req, 'sample_artifact', art1['id'], 'small_blob',
@@ -498,8 +498,8 @@ class TestDynamicQuotas(base.BaseTestArtifactAPI):
         # amount exceeds this limit RequestEntityTooLarge is raised and
         # upload fails.
         with mock.patch(
-                'glare.common.store_api.save_blob_to_store',
-                side_effect=store_api.save_blob_to_store) as mocked_save:
+                'glare.common.store_api._save_blob_to_store',
+                side_effect=store_api._save_blob_to_store) as mocked_save:
             data = BytesIO(b'a' * 10)
             self.assertRaises(
                 exception.RequestEntityTooLarge,
@@ -517,8 +517,8 @@ class TestDynamicQuotas(base.BaseTestArtifactAPI):
 
         # try to upload with smaller amount that doesn't exceeds quota
         with mock.patch(
-                'glare.common.store_api.save_blob_to_store',
-                side_effect=store_api.save_blob_to_store) as mocked_save:
+                'glare.common.store_api._save_blob_to_store',
+                side_effect=store_api._save_blob_to_store) as mocked_save:
             data = BytesIO(b'a' * 7)
             self.controller.upload_blob(
                 user2_req, 'sample_artifact', art2['id'], 'small_blob',
@@ -544,8 +544,8 @@ class TestDynamicQuotas(base.BaseTestArtifactAPI):
         # upload. If uploaded data amount exceeds this limit
         # RequestEntityTooLarge is raised and upload fails.
         with mock.patch(
-                'glare.common.store_api.save_blob_to_store',
-                side_effect=store_api.save_blob_to_store) as mocked_save:
+                'glare.common.store_api._save_blob_to_store',
+                side_effect=store_api._save_blob_to_store) as mocked_save:
             data = BytesIO(b'a' * 11)
             self.assertRaises(
                 exception.RequestEntityTooLarge,
@@ -563,8 +563,8 @@ class TestDynamicQuotas(base.BaseTestArtifactAPI):
 
         # try to upload with smaller amount that doesn't exceeds quota
         with mock.patch(
-                'glare.common.store_api.save_blob_to_store',
-                side_effect=store_api.save_blob_to_store) as mocked_save:
+                'glare.common.store_api._save_blob_to_store',
+                side_effect=store_api._save_blob_to_store) as mocked_save:
             data = BytesIO(b'a' * 10)
             self.controller.upload_blob(
                 admin_req, 'sample_artifact', arta['id'], 'small_blob',
