@@ -559,8 +559,12 @@ class ResponseSerializer(api_versioning.VersionedResource,
         response.status_int = http_client.NO_CONTENT
 
     @supported_versions(min_ver='1.0')
-    def upload_blob(self, response, artifact):
-        self._prepare_json_response(response, artifact)
+    def upload_blob(self, response, result):
+        if isinstance(result, dict):
+            self._prepare_json_response(response, result)
+        else:
+            response.status_int = http_client.ACCEPTED
+            response.headers['Location'] = '/flows/' + result
 
     @staticmethod
     def _serialize_blob(response, result):

@@ -71,6 +71,9 @@ class BaseArtifact(base.VersionedObject):
 
     STATUS = ('drafted', 'active', 'deactivated', 'deleted')
 
+    # Allowed values: direct, inmemory, async
+    UPLOAD_WORKFLOW_TYPE = 'direct'
+
     Field = wrappers.Field.init
     DictField = wrappers.DictField.init
     ListField = wrappers.ListField.init
@@ -151,6 +154,12 @@ class BaseArtifact(base.VersionedObject):
                         "by some other tool in the background. "
                         "Redefines global parameter of the same name "
                         "from [DEFAULT] section.")),
+        cfg.BoolOpt('async_upload_workflow',
+                    default=False,
+                    help=_(
+                        "If False synchronous workflow will be used to upload "
+                        "data to store. Otherwise execution will be passed to "
+                        "taskflow executor engine in a standalone process.")),
         cfg.StrOpt('default_store',
                    choices=('file', 'filesystem', 'http', 'https', 'swift',
                             'swift+http', 'swift+https', 'swift+config', 'rbd',
@@ -484,12 +493,12 @@ Possible values:
         pass
 
     @classmethod
-    def validate_upload(cls, context, af, field_name, fd):
+    def validate_upload(cls, context, af, field_name, fd, blob_key):
         """Validation hook for uploading."""
         return fd, None
 
     @classmethod
-    def validate_download(cls, context, af, field_name, fd):
+    def validate_download(cls, context, af, field_name, fd, blob_key):
         """Validation hook for downloading."""
         return fd, None
 

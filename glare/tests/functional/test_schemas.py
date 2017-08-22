@@ -180,6 +180,7 @@ fixtures = {
                           u'status': {
                               u'enum': [
                                   u'saving',
+                                  u'staged',
                                   u'active'],
                               u'type': u'string'}},
                       u'required': [u'size',
@@ -232,6 +233,7 @@ fixtures = {
                         u'status': {
                             u'enum': [
                                 u'saving',
+                                u'staged',
                                 u'active'],
                             u'type': u'string'}},
                     u'required': [u'size',
@@ -412,6 +414,7 @@ fixtures = {
                                 u'status': {
                                     u'enum': [
                                         u'saving',
+                                        u'staged',
                                         u'active'],
                                     u'type': u'string'}},
                             u'required': [u'size',
@@ -493,6 +496,7 @@ fixtures = {
                     u'size': {u'type': [u'number',
                                         u'null']},
                     u'status': {u'enum': [u'saving',
+                                          u'staged',
                                           u'active'],
                                 u'type': u'string'}},
                 u'required': [u'size',
@@ -603,6 +607,7 @@ fixtures = {
                                 u'size': {u'type': [u'number',
                                                     u'null']},
                                 u'status': {u'enum': [u'saving',
+                                                      u'staged',
                                                       u'active'],
                                             u'type': u'string'}},
                 u'required': [u'size',
@@ -692,6 +697,7 @@ fixtures = {
                            u'size': {u'type': [u'number',
                                                u'null']},
                            u'status': {u'enum': [u'saving',
+                                                 u'staged',
                                                  u'active'],
                                        u'type': u'string'}},
                        u'required': [u'size',
@@ -837,6 +843,7 @@ fixtures = {
                          u'size': {u'type': [u'number',
                                              u'null']},
                          u'status': {u'enum': [u'saving',
+                                               u'staged',
                                                u'active'],
                                      u'type': u'string'}},
                      u'required': [u'size',
@@ -870,6 +877,7 @@ fixtures = {
                     u'size': {u'type': [u'number',
                                         u'null']},
                     u'status': {u'enum': [u'saving',
+                                          u'staged',
                                           u'active'],
                                 u'type': u'string'}},
                 u'required': [u'size',
@@ -901,6 +909,7 @@ fixtures = {
                                 u'size': {u'type': [u'number',
                                                     u'null']},
                                 u'status': {u'enum': [u'saving',
+                                                      u'staged',
                                                       u'active'],
                                             u'type': u'string'}},
                 u'required': [u'size',
