@@ -24,6 +24,7 @@ from oslo_utils import timeutils
 from oslo_utils import uuidutils
 import six.moves.urllib.parse as urlparse
 
+from glare.async import teskflow_executor
 from glare.common import exception
 from glare.common import policy
 from glare.common import store_api
@@ -520,6 +521,9 @@ class Engine(object):
         """
         blob_name = self._generate_blob_name(field_name, blob_key)
         blob_id = uuidutils.generate_uuid()
+        blob = {'url': None, 'size': None, 'md5': None, 'sha1': None,
+                'sha256': None, 'id': blob_id, 'status': 'saving',
+                'external': False, 'content_type': content_type}
 
         lock_key = "%s:%s" % (type_name, artifact_id)
         with self.lock_engine.acquire(context, lock_key):
@@ -535,9 +539,7 @@ class Engine(object):
             utils.validate_change_allowed(af, field_name)
             size = self._calculate_allowed_space(
                 context, af, field_name, content_length, blob_key)
-            blob = {'url': None, 'size': size, 'md5': None, 'sha1': None,
-                    'sha256': None, 'id': blob_id, 'status': 'saving',
-                    'external': False, 'content_type': content_type}
+            blob['size'] = size
 
             modified_af = self._save_blob_info(
                 context, af, field_name, blob_key, blob)
@@ -547,17 +549,33 @@ class Engine(object):
                   "Start blob uploading to backend.",
                   {'artifact': af.id, 'blob_name': blob_name})
 
-        # try to perform blob uploading to storage
-        path = None
-        try:
+        # Now we have to choose between 3 possible upload workflow types
+        if af.UPLOAD_WORKFLOW_TYPE == 'direct':
+            # do nothing
+            pass
+        elif af.UPLOAD_WORKFLOW_TYPE == 'inmemory':
+            # upload data to temporary inmemory file and run upload hook
+            fd = utils.create_inmemory_file(fd)
             try:
                 # call upload hook first
-                fd, path = af.validate_upload(context, af, field_name, fd)
+                fd = af.validate_upload(context, af, field_name, fd, blob_key)
             except exception.GlareException:
                 raise
             except Exception as e:
                 raise exception.BadRequest(message=str(e))
+        elif af.UPLOAD_WORKFLOW_TYPE == 'async':
+            # run asynchronous upload hook and get taskflow object
+            executor = teskflow_executor.FlowExecutor(
+                context, af, field_name, fd, blob_key, blob
+            )
+            pool = utils.get_thread_pool("flows_eventlet_pool", size=10)
+            pool.spawn_n(executor.run)
+            return executor.flow_id
+        else:
+            raise exception.IncorrectArtifactType
 
+        # try to perform blob uploading to storage
+        try:
             default_store = getattr(
                 CONF, 'artifact_type:' + type_name).default_store
             # use global parameter if default store isn't set per artifact type
@@ -576,9 +594,6 @@ class Engine(object):
                     blob_dict_attr = getattr(modified_af, field_name)
                     del blob_dict_attr[blob_key]
                     af.update_blob(context, af.id, field_name, blob_dict_attr)
-        finally:
-            if path:
-                os.remove(path)
 
         LOG.info("Successfully finished blob uploading for artifact "
                  "%(artifact)s blob field %(blob)s.",
@@ -643,7 +658,7 @@ class Engine(object):
         try:
             # call download hook in the end
             data, path = af.validate_download(
-                context, af, field_name, data)
+                context, af, field_name, data, blob_key)
         except exception.GlareException:
             raise
         except Exception as e:

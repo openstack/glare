@@ -403,7 +403,7 @@ class FunctionalTest(test_utils.BaseTestCase):
 
     def setUp(self):
         super(FunctionalTest, self).setUp()
-        self.test_dir = self.useFixture(fixtures.TempDir()).path
+        self.test_dir = '/tmp/farts' # self.useFixture(fixtures.TempDir()).path
 
         self.api_protocol = 'http'
         self.glare_port, glare_sock = test_utils.get_unused_port_and_socket()

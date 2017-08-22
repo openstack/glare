@@ -88,7 +88,7 @@ class HookChecker(base.BaseArtifact):
         return tfile, path
 
     @classmethod
-    def validate_upload(cls, context, af, field_name, fd):
+    def validate_upload(cls, context, af, field_name, fd, blob_key):
         if getattr(CONF, 'artifact_type:hooks_artifact').in_memory_processing:
             return file_utils.unpack_zip_archive_in_memory(
                 context, af, 'content', fd), None
@@ -97,7 +97,7 @@ class HookChecker(base.BaseArtifact):
                 context, af, field_name, fd)
 
     @classmethod
-    def validate_download(cls, context, af, field_name, fd):
+    def validate_download(cls, context, af, field_name, fd, blob_key):
         if af.forbid_download_zip and field_name == 'zip':
             raise exception.BadRequest
         return fd, None

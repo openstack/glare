@@ -28,9 +28,11 @@ from eventlet.green import socket
 import hashlib
 import os
 import re
+import tempfile
 
 import glance_store
 from OpenSSL import crypto
+from oslo_concurrency import lockutils
 from oslo_config import cfg
 from oslo_log import log as logging
 from oslo_utils import encodeutils
@@ -42,6 +44,7 @@ import requests
 import six
 
 from glare.common import exception
+from glare.common import wsgi
 from glare.i18n import _
 from glare.objects.meta import fields as glare_fields
 
@@ -50,6 +53,8 @@ CONF = cfg.CONF
 LOG = logging.getLogger(__name__)
 
 GLARE_TEST_SOCKET_FD_STR = 'GLARE_TEST_SOCKET_FD'
+
+_CACHED_THREAD_POOL = {}
 
 
 def cooperative_iter(iter):
@@ -81,6 +86,8 @@ def cooperative_read(fd):
 
 
 MAX_COOP_READER_BUFFER_SIZE = 134217728  # 128M seems like a sane buffer limit
+
+INMEMORY_OBJECT_SIZE_LIMIT = 134217728  # 128 megabytes
 
 
 class CooperativeReader(object):
@@ -623,3 +630,62 @@ def get_system_ca_file():
             LOG.debug("Using ca file %s", ca)
             return ca
     LOG.warning("System ca file could not be found.")
+
+
+def create_inmemory_file(fd):
+    flobj = io.BytesIO(fd.read(INMEMORY_OBJECT_SIZE_LIMIT))
+
+    # Raise exception if something left
+    data = fd.read(1)
+    if data:
+        msg = _("The zip you are trying to unpack is too big. "
+                "The system upper limit is %s") % INMEMORY_OBJECT_SIZE_LIMIT
+        raise exception.RequestEntityTooLarge(msg)
+
+    return flobj
+
+
+def create_temporary_file(stream, suffix=''):
+    """Create a temporary local file from a stream.
+
+    :param stream: stream of bytes to be stored in a temporary file
+    :param suffix: (optional) file name suffix
+    """
+    tfd, path = tempfile.mkstemp(suffix=suffix)
+    while True:
+        data = stream.read(64536)
+        if data == b'':  # end of file reached
+            break
+        os.write(tfd, data)
+    tfile = os.fdopen(tfd, "rb")
+    return tfile, path
+
+
+def memoize(lock_name):
+    def memoizer_wrapper(func):
+        @lockutils.synchronized(lock_name)
+        def memoizer(lock_name):
+            if lock_name not in _CACHED_THREAD_POOL:
+                _CACHED_THREAD_POOL[lock_name] = func()
+
+            return _CACHED_THREAD_POOL[lock_name]
+
+        return memoizer(lock_name)
+
+    return memoizer_wrapper
+
+
+def get_thread_pool(lock_name, size=1024):
+    """Initializes eventlet thread pool.
+    If thread pool is present in cache, then returns it from cache
+    else create new pool, stores it in cache and return newly created
+    pool.
+    @param lock_name:  Name of the lock.
+    @param size: Size of eventlet pool.
+    @return: eventlet pool
+    """
+    @memoize(lock_name)
+    def _get_thread_pool():
+        return wsgi.get_asynchronous_eventlet_pool(size=size)
+
+    return _get_thread_pool
