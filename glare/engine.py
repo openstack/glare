@@ -62,7 +62,7 @@ class Engine(object):
 
         # generate all schemas and quotas
         self.schemas = {}
-        self.quotas = {
+        self.config_quotas = {
             'max_artifact_number': CONF.max_artifact_number,
             'max_uploaded_data': CONF.max_uploaded_data
         }
@@ -72,10 +72,10 @@ class Engine(object):
                 get_artifact_type(type_name).gen_schemas()
             type_conf_section = getattr(CONF, 'artifact_type:' + type_name)
             if type_conf_section.max_artifact_number is not None:
-                self.quotas['max_artifact_number:' + type_name] = \
+                self.config_quotas['max_artifact_number:' + type_name] = \
                     type_conf_section.max_artifact_number
             if type_conf_section.max_uploaded_data is not None:
-                self.quotas['max_uploaded_data:' + type_name] = \
+                self.config_quotas['max_uploaded_data:' + type_name] = \
                     type_conf_section.max_uploaded_data
 
     lock_engine = locking.LockEngine(artifact_api.ArtifactLockApi())
@@ -707,19 +707,21 @@ class Engine(object):
         """
         action_name = "artifact:list_all_quotas"
         policy.authorize(action_name, {}, context)
-        qs = quota.list_quotas()
-        qs[None] = self.quotas
-        return qs
+        return {
+            'quotas': quota.list_quotas(),
+            'global_quotas': self.config_quotas
+        }
 
-    def list_project_quotas(self, context, project_id):
+    def list_project_quotas(self, context, project_id=None):
         """Get detailed info about project quotas.
 
         :param context: user request context
         :param project_id: id of the project for which to show quotas
         :return: definition of requested quotas for the project
         """
+        project_id = project_id or context.tenant
         action_name = "artifact:list_project_quotas"
         policy.authorize(action_name, {'project_id': project_id}, context)
-        qs = self.quotas.copy()
+        qs = self.config_quotas.copy()
         qs.update(quota.list_quotas(project_id)[project_id])
         return {project_id: qs}
