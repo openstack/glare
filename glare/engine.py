@@ -27,6 +27,7 @@ from glare.common import exception
 from glare.common import policy
 from glare.common import store_api
 from glare.common import utils
+from glare.common import wsgi
 from glare.db import artifact_api
 from glare.i18n import _
 from glare import locking
@@ -570,14 +571,19 @@ class Engine(object):
         # Step 2. Call pre_upload_hook and upload data to the store
         try:
             try:
-                # call upload hook first
+                pool = wsgi.get_thread_pool("upload_hooks_eventlet_pool")
+                # call upload hook first in a separate thread
                 if hasattr(af, 'validate_upload'):
                     LOG.warning("Method 'validate_upload' was deprecated. "
                                 "Please use 'pre_upload_hook' instead.")
-                    fd, path = af.validate_upload(context, af, field_name, fd)
+                    greenthread = pool.spawn(
+                        af.validate_upload, context, af, field_name, fd)
+                    fd, path = greenthread.wait()
                 else:
-                    fd = af.pre_upload_hook(
-                        context, af, field_name, blob_key, fd)
+                    greenthread = pool.spawn(
+                        af.pre_upload_hook, context, af, field_name, blob_key,
+                        fd)
+                    fd = greenthread.wait()
             except exception.GlareException:
                 raise
             except Exception as e:
