@@ -16,22 +16,22 @@ import hashlib
 import operator
 import threading
 
+import osprofiler.sqlalchemy
+import six
+import sqlalchemy
+import sqlalchemy.exc
+import sqlalchemy.orm as orm
 from oslo_config import cfg
 from oslo_db import exception as db_exception
 from oslo_db import options
 from oslo_db.sqlalchemy import session
 from oslo_log import log as os_logging
 from oslo_utils import timeutils
-import osprofiler.sqlalchemy
 from retrying import retry
-import six
-import sqlalchemy
 from sqlalchemy import and_
-import sqlalchemy.exc
 from sqlalchemy import exists
 from sqlalchemy import func
 from sqlalchemy import or_
-import sqlalchemy.orm as orm
 from sqlalchemy.orm import aliased
 from sqlalchemy.orm import joinedload
 
@@ -729,3 +729,47 @@ def delete_blob_data(context, uri, session):
         blob_data_id = uri[6:]
         session.query(
             models.ArtifactBlobData).filter_by(id=blob_data_id).delete()
+
+
+@retry(retry_on_exception=_retry_on_deadlock, wait_fixed=500,
+       stop_max_attempt_number=50)
+def set_hard_dependency(source, destination, session):
+    with session.begin():
+        dependency = models.ArtifactDependecy()
+
+        # create or update the basic, set basic
+        dependency.artifact_origin = source
+        dependency.artifact_source = source
+        dependency.artifact_dest = destination
+        session.add(dependency)
+
+        condition = models.ArtifactDependecy.artifact_dest == source
+        query = session.query(models.ArtifactDependecy).filter(condition)
+
+        # return list of object, that each represent a row
+        dependencies = query.all()
+
+        # Create additional rows
+        for d in dependencies:
+            dependency = models.ArtifactDependecy()
+            dependency.artifact_origin = d.artifact_origin
+            dependency.artifact_source = source
+            dependency.artifact_dest = destination
+            session.add(dependency)
+
+        # Todo : check for cycles
+
+        session.flush()
+
+
+@retry(retry_on_exception=_retry_on_deadlock, wait_fixed=500,
+       stop_max_attempt_number=50)
+def get_hard_dependencies(artifact_id, session):
+    # return list of dependencies of now
+    condition = models.ArtifactDependecy.artifact_origin == artifact_id
+    query = session.query(models.ArtifactDependecy).filter(condition)
+    # get list of sqlAlchemy ArtifactDependecy objects
+    dependencies = query.all()
+    return [d.to_dict() for d in dependencies]
+
+    # Todo: delete method

@@ -135,4 +135,24 @@ class API(wsgi.Router):
                        action='reject',
                        allowed_methods='GET')
 
+        # ---hard dependencies---
+        mapper.connect('/dependencies',
+                       controller=glare_resource,
+                       action='set_hard_dependency',
+                       conditions={'method': ['POST']})
+        mapper.connect('/dependencies',
+                       controller=reject_method_resource,
+                       action='reject',
+                       allowed_methods='POST')
+
+        mapper.connect('/dependencies/{artifact_id}',
+                       controller=glare_resource,
+                       action='get_hard_dependencies',
+                       conditions={'method': ['GET']},
+                       body_reject=True)
+        mapper.connect('/dependencies/{artifact_id}',
+                       controller=reject_method_resource,
+                       action='reject',
+                       allowed_methods='GET')
+
         super(API, self).__init__(mapper)

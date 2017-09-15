@@ -90,6 +90,9 @@ artifact_policy_rules = [
     policy.RuleDefault("artifact:list_project_quotas",
                        "project_id:%(project_id)s or rule:context_is_admin",
                        "Policy to get info about project quotas"),
+    policy.RuleDefault("artifact:set_hard_dependency",
+                       "rule:admin_or_owner",
+                       "Policy to get info about project quotas"),
 ]
 
 

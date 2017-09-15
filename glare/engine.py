@@ -15,25 +15,26 @@
 
 from copy import deepcopy
 
-from eventlet import tpool
 import jsonpatch
+import six.moves.urllib.parse as urlparse
+from eventlet import tpool
 from oslo_config import cfg
 from oslo_log import log as logging
 from oslo_utils import excutils
 from oslo_utils import timeutils
 from oslo_utils import uuidutils
-import six.moves.urllib.parse as urlparse
 
+from glare import hard_dependency
+from glare import locking
+from glare import quota
 from glare.common import exception
 from glare.common import policy
 from glare.common import store_api
 from glare.common import utils
 from glare.db import artifact_api
 from glare.i18n import _
-from glare import locking
 from glare.notification import Notifier
 from glare.objects.meta import registry
-from glare import quota
 
 CONF = cfg.CONF
 LOG = logging.getLogger(__name__)
@@ -721,6 +722,8 @@ class Engine(object):
         :param context: user request context
         :return: dict with definitions of redefined quotas for all projects
          and global defaults
+        action_name = "artifact:set_hard_dependency"
+        policy.authorize(action_name, {}, context)
         """
         action_name = "artifact:list_all_quotas"
         policy.authorize(action_name, {}, context)
@@ -742,3 +745,40 @@ class Engine(object):
         qs = self.config_quotas.copy()
         qs.update(quota.list_quotas(project_id)[project_id])
         return {project_id: qs}
+
+    def set_hard_dependency(self, context, source_id, destination_id):
+        """
+        Set hard dependency between the artifact with
+        source_id to the artifact with the destination_id
+        :param context: user request context
+        :param source_id: source artifact id
+        :param destination_id: target artifact id
+        """
+        source = self._show_artifact(context, 'all', source_id, read_only=True)
+        destination = self._show_artifact(context, 'all', destination_id, read_only=True)
+
+        action_name = "artifact:set_hard_dependency"
+        policy.authorize(action_name, source.to_dict(), context)
+
+        # Engine should check that both source and destination artifact
+        # should be from the same tenant
+        if source.owner != destination.owner:
+            msg = _("You cannot set hard dependency two artifacts with"
+                    " different owners:owner of the source artifact:%s\nowner"
+                    " of the destination artifact %s") % \
+                  source.owner, destination.owner
+            raise exception.BadRequest(msg)
+
+        hard_dependency.set_hard_dependency(source_id, destination_id)
+        Notifier.notify(context, action_name, source)
+
+    def get_hard_dependencies(self, context, artifact_id, ):
+        """
+
+        :param context: user request context
+        :param artifact_id: source artifact id
+        """
+        # Check that the owner request the api
+        self._show_artifact(context, 'all', artifact_id, read_only=True)
+
+        return hard_dependency.get_hard_dependencies(artifact_id)
