@@ -65,6 +65,57 @@ def extract_zip_to_temporary_folder(tfile):
     return tdir
 
 
+def unpack_zip_archive_to_artifact_folder(context, af, zip_ref, folder_name):
+    """Upload a file to a blob dictionary.
+
+    :param context: user context
+    :param af: artifact object
+    :param zip_ref: zip archive to be extracted
+    :param folder_name: name of the artifact folder where to extract data
+    """
+    file_dict = {}
+    blobs = []
+    for name in zip_ref.namelist():
+        if not name.endswith('/'):
+            blob_id = uuidutils.generate_uuid()
+            # create an an empty blob instance in db with 'saving' status
+            blob = {'url': None, 'size': None, 'md5': None, 'sha1': None,
+                    'sha256': None, 'status': 'saving', 'id': blob_id,
+                    'external': False,
+                    'content_type': 'application/octet-stream'}
+            file_dict[name] = blob
+            blobs.append((blob_id, utils.BlobIterator(zip_ref.read(name))))
+
+    af = af.update_blob(context, af.id, folder_name, file_dict)
+
+    default_store = getattr(
+        CONF, 'artifact_type:' + af.get_type_name()).default_store
+    # use global parameter if default store isn't set per artifact type
+    if default_store is None:
+        default_store = CONF.glance_store.default_store
+
+    # try to perform blob uploading to storage backend
+    try:
+        blobs_info = store_api.save_blobs_to_store(
+            blobs, context, af.get_max_blob_size(folder_name),
+            default_store)
+        for name in zip_ref.namelist():
+            if not name.endswith('/'):
+                location_uri, size, checksums = blobs_info[
+                    file_dict[name]['id']]
+                # update blob info and activate it
+                file_dict[name].update({'url': location_uri,
+                                        'status': 'active',
+                                        'size': size})
+                file_dict[name].update(checksums)
+    except Exception:
+        # if upload failed remove blob from db and storage
+        with excutils.save_and_reraise_exception(logger=LOG):
+            af.update_blob(context, af.id, folder_name, None)
+
+    af.update_blob(context, af.id, folder_name, file_dict)
+
+
 def upload_content_file(context, af, data, blob_dict, key_name,
                         content_type='application/octet-stream'):
     """Upload a file to a blob dictionary.
@@ -110,30 +161,3 @@ def upload_content_file(context, af, data, blob_dict, key_name,
     getattr(af, blob_dict)[key_name] = blob
     af.update_blob(context, af.id, blob_dict, getattr(af, blob_dict))
 
-
-def unpack_zip_archive_in_memory(context, af, field_name, fd):
-    """Unpack zip archive in memory and write its content to artifact folder.
-
-    :param context: user context
-    :param af: artifact object
-    :param field_name: blob dict name where to unpack the data
-    :param fd: zip archive
-    :return: io.BytesIO object - simple stream of in-memory bytes
-    """
-    flobj = io.BytesIO(fd.read(INMEMORY_OBJECT_SIZE_LIMIT))
-
-    # Raise exception if something left
-    data = fd.read(1)
-    if data:
-        msg = _("The zip you are trying to unpack is too big. "
-                "The system upper limit is %s") % INMEMORY_OBJECT_SIZE_LIMIT
-        raise exception.RequestEntityTooLarge(msg)
-
-    zip_ref = zipfile.ZipFile(flobj, 'r')
-    for name in zip_ref.namelist():
-        if not name.endswith('/'):
-            upload_content_file(
-                context, af, utils.BlobIterator(zip_ref.read(name)),
-                field_name, name)
-    flobj.seek(0)
-    return flobj

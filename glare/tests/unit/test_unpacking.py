@@ -42,3 +42,8 @@ class TestArtifactHooks(base.BaseTestArtifactAPI):
         self.assertEqual(11, artifact['content']['folder1/bbb.txt']['size'])
         self.assertEqual(
             11, artifact['content']['folder1/folder2/ccc.txt']['size'])
+
+    def test_unpacking_database(self):
+        self.config(default_store='database',
+                    group='artifact_type:unpacking_artifact')
+        self.test_unpacking()
