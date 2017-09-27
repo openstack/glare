@@ -27,13 +27,13 @@ from glare.objects.meta import validators
 from glare.objects.meta import wrappers
 
 global_artifact_opts = [
-    cfg.IntOpt('max_uploaded_data', default=1099511627776,  # 1 Terabyte
+    cfg.IntOpt('max_uploaded_data', default=-1,  # disabled
                min=-1,
                help=_("Defines how many bytes of data user can upload to "
                       "storage. This parameter is global and doesn't take "
                       "into account data of what type was uploaded. "
                       "Value -1 means no limit.")),
-    cfg.IntOpt('max_artifact_number', default=100,
+    cfg.IntOpt('max_artifact_number', default=-1,  # disabled
                min=-1,
                help=_("Defines how many artifacts user can have. This "
                       "parameter is global and doesn't take "
