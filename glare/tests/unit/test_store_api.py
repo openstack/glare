@@ -13,21 +13,23 @@
 #    limitations under the License.
 
 import os
+import signal
+from subprocess import Popen
 import tempfile
+import time
 
 from six import BytesIO
 
 from glare.common import exception as exc
 from glare.common import store_api
 from glare.tests.unit import base
+from glare.tests import utils
 
 
 class TestStoreAPI(base.BaseTestArtifactAPI):
 
-    def test_read_data(self):
-        """Read data from file, http and database."""
-
-        # test local temp file
+    def test_read_data_filesystem(self):
+        # test local read from temp file
         tfd, path = tempfile.mkstemp()
         try:
             os.write(tfd, b'a' * 1000)
@@ -45,7 +47,8 @@ class TestStoreAPI(base.BaseTestArtifactAPI):
         finally:
             os.remove(path)
 
-        # test sql object
+    def test_read_data_database(self):
+        # test read from sql object
         values = {'name': 'ttt', 'version': '1.0'}
         self.sample_artifact = self.controller.create(
             self.req, 'sample_artifact', values)
@@ -60,15 +63,30 @@ class TestStoreAPI(base.BaseTestArtifactAPI):
         self.assertRaises(exc.RequestEntityTooLarge,
                           store_api.read_data, flobj['data'], limit=99)
 
-        # test external http
-        flobj = store_api.load_from_store(
-            'https://www.apache.org/licenses/LICENSE-2.0.txt',
-            self.req.context
-        )
-        self.assertEqual(3967, len(store_api.read_data(flobj)))
-        flobj = store_api.load_from_store(
-            'https://www.apache.org/licenses/LICENSE-2.0.txt',
-            self.req.context
-        )
-        self.assertRaises(exc.RequestEntityTooLarge,
-                          store_api.read_data, flobj, limit=3966)
+    def test_read_data_http(self):
+        p = None
+        path = os.getcwd()
+        try:
+            # start simple http server
+            port = utils.get_unused_port()
+            os.chdir(self.test_dir)
+            with open('test_file.txt', 'wb') as f:
+                f.write(b'a' * 1000)
+            p = Popen(["python", "-m", "SimpleHTTPServer", str(port)])
+            time.sleep(5)
+            # test read from external http
+            flobj = store_api.load_from_store(
+                'http://localhost:%d/test_file.txt' % port,
+                self.req.context
+            )
+            self.assertEqual(1000, len(store_api.read_data(flobj)))
+            flobj = store_api.load_from_store(
+                'http://localhost:%d/test_file.txt' % port,
+                self.req.context
+            )
+            self.assertRaises(exc.RequestEntityTooLarge,
+                              store_api.read_data, flobj, limit=999)
+        finally:
+            os.chdir(path)
+            if p:
+                os.kill(p.pid, signal.SIGTERM)
