@@ -12,8 +12,43 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
+import importlib
+import pkgutil
+import sys
+
+from oslo_config import cfg
+from oslo_config import types as conf_types
+from oslo_log import log as logging
+
 from glare.api.v1 import resource
+from glare.common import exception
 from glare.common import wsgi
+from glare.i18n import _
+
+LOG = logging.getLogger(__name__)
+
+external_api_opts = [
+    cfg.ListOpt('custom_external_api_modules', default=[],
+                item_type=conf_types.String(),
+                help=_("List of custom user modules with external APIs that "
+                       "will be attached to Glare dynamically during service "
+                       "startup."))
+]
+
+CONF = cfg.CONF
+CONF.register_opts(external_api_opts)
+
+
+def import_submodules(module):
+    """Import all submodules of a module.
+
+    :param module: Package name
+    :return: list of imported modules
+    """
+    package = sys.modules[module]
+    return [
+        importlib.import_module(module + '.' + name)
+        for loader, name, is_pkg in pkgutil.walk_packages(package.__path__)]
 
 
 class API(wsgi.Router):
@@ -134,5 +169,27 @@ class API(wsgi.Router):
                        controller=reject_method_resource,
                        action='reject',
                        allowed_methods='GET')
+
+        # Now register external APIs
+        custom_module_list = []
+        for module_name in CONF.custom_external_api_modules:
+            try:
+                custom_module_list.append(importlib.import_module(module_name))
+            except Exception as e:
+                LOG.exception(e)
+                msg = ("Cannot import custom external API from module "
+                       "%(module_name)%s. Error: %(error)s",
+                       {'module_name': module_name, 'error': str(e)})
+                raise exception.GlareException(msg)
+
+        for module in custom_module_list:
+            try:
+                mapper.extend(module.mapper)
+            except Exception as e:
+                LOG.exception(e)
+                msg = ("Cannot attach custom external API from module "
+                       "%(module_name)%s. Error: %(error)s",
+                       {'module_name': str(module), 'error': str(e)})
+                raise exception.IncorrectExternalAPI(msg)
 
         super(API, self).__init__(mapper)

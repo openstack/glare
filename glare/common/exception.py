@@ -103,6 +103,10 @@ class IncorrectArtifactType(GlareException):
     message = _("Artifact type is incorrect: %(explanation)s")
 
 
+class IncorrectExternalAPI(GlareException):
+    message = _("External API is incorrect: %(explanation)s")
+
+
 class ArtifactNotFound(NotFound):
     message = _("Artifact with type name '%(type_name)s' and id '%(id)s' was "
                 "not found.")

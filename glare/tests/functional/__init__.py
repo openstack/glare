@@ -284,6 +284,8 @@ class GlareServer(Server):
         self.custom_artifact_types_modules = ''
         self.max_uploaded_data = '1099511627776'
         self.max_artifact_number = '100'
+        self.custom_external_api_modules = ''
+
         self.artifact_type_section = ''
 
         self.conf_base = """[DEFAULT]
@@ -301,6 +303,7 @@ enabled_artifact_types = %(enabled_artifact_types)s
 custom_artifact_types_modules = %(custom_artifact_types_modules)s
 max_uploaded_data = %(max_uploaded_data)s
 max_artifact_number = %(max_artifact_number)s
+custom_external_api_modules = %(custom_external_api_modules)s
 [oslo_policy]
 policy_file = %(policy_file)s
 policy_default_rule = %(policy_default_rule)s
