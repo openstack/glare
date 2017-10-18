@@ -1,0 +1,10 @@
+Code-Review+1: Moshe Elisha <moshe.elisha@nokia.com>
+Verified-1: Jenkins
+Code-Review+2: Mike Fedosin <mikhail.fedosin.ext@nokia.com>
+Workflow+1: Mike Fedosin <mikhail.fedosin.ext@nokia.com>
+Verified+2: Zuul
+Submitted-by: Zuul
+Submitted-at: Wed, 18 Oct 2017 12:45:02 +0000
+Reviewed-on: https://review.openstack.org/511326
+Project: openstack/glare
+Branch: refs/heads/master
