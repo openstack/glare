@@ -1,0 +1,9 @@
+Verified-1: Jenkins
+Code-Review+2: Mike Fedosin <mikhail.fedosin.ext@nokia.com>
+Workflow+1: Mike Fedosin <mikhail.fedosin.ext@nokia.com>
+Verified+2: Zuul
+Submitted-by: Zuul
+Submitted-at: Fri, 20 Oct 2017 15:16:39 +0000
+Reviewed-on: https://review.openstack.org/511145
+Project: openstack/glare
+Branch: refs/heads/master
