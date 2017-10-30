@@ -35,12 +35,7 @@ class TestStaticQuotas(base.BaseTestArtifactAPI):
         # set global limit on 10 artifacts
         self.config(max_artifact_number=10)
         # 3 images, 15 heat templates, 10 murano packages
-        self.config(max_artifact_number=3,
-                    group='artifact_type:images')
-        self.config(max_artifact_number=15,
-                    group='artifact_type:heat_templates')
-        self.config(max_artifact_number=10,
-                    group='artifact_type:murano_packages')
+        self.set_art_conf_max_artifact_number(3, 15, 10)
 
         # create 3 images for user1
         for i in range(3):
@@ -87,7 +82,48 @@ class TestStaticQuotas(base.BaseTestArtifactAPI):
         self.config(max_artifact_number=-1,
                     group='artifact_type:heat_templates')
         self.controller.create(
-            user1_req, 'heat_templates', {'name': 'ht16'})
+            user1_req, 'images', {'name': 'ht16'})
+
+        self.assertEqual(
+            26, len(self.controller.list(user1_req, 'all')['artifacts']))
+        self.set_art_conf_max_artifact_number(1, 1, 1)
+
+        # Assert that no artifact was deleted (due art related conf changes)
+        self.assertEqual(
+            26, len(self.controller.list(user1_req, 'all')['artifacts']))
+
+        # Can't create more arts due to types' max_artifact_number limitation
+        self.assertRaises(exception.Forbidden, self.controller.create,
+                          user1_req, 'heat_templates', {'name': 'ht16'})
+        self.assertRaises(exception.Forbidden, self.controller.create,
+                          user1_req, 'images', {'name': 'im16'})
+        self.assertRaises(exception.Forbidden, self.controller.create,
+                          user1_req, 'murano_packages', {'name': 'mu16'})
+
+        # limit only global artifact number
+        self.config(max_artifact_number=10)
+        self.set_art_conf_max_artifact_number(-1, -1, -1)
+
+        # Assert that no artifact was deleted (due global art conf changes)
+        self.assertEqual(
+            26, len(self.controller.list(user1_req, 'all')['artifacts']))
+
+        # Can't create more arts due to global max_artifact_number limitation
+        self.assertRaises(exception.Forbidden, self.controller.create,
+                          user1_req, 'heat_templates', {'name': 'ht16'})
+        self.assertRaises(exception.Forbidden, self.controller.create,
+                          user1_req, 'images', {'name': 'im16'})
+        self.assertRaises(exception.Forbidden, self.controller.create,
+                          user1_req, 'murano_packages', {'name': 'mu16'})
+
+    def set_art_conf_max_artifact_number(self, images_num, heat_temp_num,
+                                         murano_pkg_num):
+        self.config(max_artifact_number=images_num,
+                    group='artifact_type:images')
+        self.config(max_artifact_number=heat_temp_num,
+                    group='artifact_type:heat_templates')
+        self.config(max_artifact_number=murano_pkg_num,
+                    group='artifact_type:murano_packages')
 
     def test_calculate_uploaded_data(self):
         user1_req = self.get_fake_request(self.users['user1'])
