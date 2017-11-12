@@ -29,6 +29,7 @@ from glare.common import policy
 from glare.common import store_api
 from glare.common import utils
 from glare.db import artifact_api
+from glare import hard_dependency
 from glare.i18n import _
 from glare import locking
 from glare.notification import Notifier
@@ -369,6 +370,13 @@ class Engine(object):
         af = self._show_artifact(context, type_name, artifact_id)
         action_name = 'artifact:delete'
         policy.authorize(action_name, af.to_dict(), context)
+        if hard_dependency.get_hard_dependencies_children(
+                context, artifact_id)["graph"]["artifacts"]:
+            message = "Cannot delete artifact, since other artifact/s" \
+                      " have Hard Dependency to it"
+            raise exception.Forbidden(message=message)
+        hard_dependency.delete_hard_dependencies_for_art_deletion(context,
+                                                                  artifact_id)
         af.pre_delete_hook(context, af)
         blobs = af.delete(context, af)
 
@@ -741,3 +749,102 @@ class Engine(object):
         qs = self.config_quotas.copy()
         qs.update(quota.list_quotas(project_id)[project_id])
         return {project_id: qs}
+
+    def get_hard_dependencies(self, context, artifact_id):
+        """
+        Get all artifact_id's hard dependencies
+        :param context: user request context
+        :param artifact_id: source artifact id
+        :return: python dic with all the artifacts that artifact_id depends on
+        """
+        # Check that the owner request the api
+        self._show_artifact(context, 'all', artifact_id, read_only=True)
+        return hard_dependency.get_hard_dependencies(context, artifact_id)
+
+    def get_hard_dependencies_children(self, context, artifact_id):
+        """get all the dependencies children of artifact_id
+        E.G. for graph: art1->art2->art3,
+        the children for art3 are art2 and art1.
+        This suggest that we must not delete art3 artifact.
+        :param context: the artifact id.
+        :param artifact_id: user request context
+        :return: List of dictionaries (that represent artifacts)
+        """
+
+        # Check that the owner request the api
+        self._show_artifact(context, 'all', artifact_id, read_only=True)
+        return hard_dependency.get_hard_dependencies_children(context,
+                                                              artifact_id)
+
+    def set_hard_dependencies(self, context, source_id, target_id):
+        """Set hard dependency between the artifact with
+        source_id to the artifact with the target_id
+        :param context: user request context
+        :param source_id: source artifact id
+        :param target_id: target artifact id
+        """
+
+        source = self._show_artifact(context, 'all', source_id, read_only=True)
+        target = self._show_artifact(context, 'all', target_id, read_only=True)
+
+        action_name = "artifact:set_hard_dependencies"
+        policy.authorize(action_name, source.to_dict(), context)
+
+        # Check that both source and target arts from the same tenant
+        if source.owner != target.owner:
+            msg = _("You cannot set hard dependency between two artifacts with"
+                    " different owners:owner of the source artifact:"
+                    "%(s_owner)s.\n Owner of the target %(t_owner)s") %\
+                source.owner, target.owner
+            raise exception.BadRequest(msg)
+
+        # Check that we don't have any cycles
+        src_dep_children_graph = \
+            hard_dependency.get_hard_dependencies_children(
+                context, source_id)['graph']['artifacts']
+        dependent_source_artifacts = [art["id"]
+                                      for art in src_dep_children_graph]
+        # creating this H.D will case a cycle
+        if source_id == target_id or (target_id in dependent_source_artifacts):
+            msg = _("You cannot set hard dependency that will cause a cycle"
+                    " dependencies. Hence cannot set hard dependency between"
+                    " artifact with uuid:%(source_id)s\n to artifact with "
+                    "uuid: %(target_id)s") %\
+                {'source_id': source_id, "target_id": target_id}
+            raise exception.BadRequest(msg)
+
+        hard_dependency.set_hard_dependencies(context, source_id, target_id)
+        Notifier.notify(context, action_name, source)
+
+    def delete_hard_dependencies(self, context, source_id, target_id):
+        """Delete hard dependencies between source art to the target art
+        :param context: user request context
+        :param source_id: source artifact id
+        :param target_id: target artifact id
+        """
+
+        # Check that the owner request the api
+        source = self._show_artifact(context, 'all', source_id, read_only=True)
+        self._show_artifact(context, 'all', target_id, read_only=True)
+
+        action_name = "artifact:delete_hard_dependencies"
+        policy.authorize(action_name, source.to_dict(), context)
+
+        # Check that we have this hard dependency
+        src_dep_graph_dict = hard_dependency.get_hard_dependencies(context,
+                                                                   source_id)
+        dependencies = src_dep_graph_dict["graph"]["dependencies"]
+
+        for d in dependencies:
+            if d["source"] == source_id and d["target"] == target_id:
+                hard_dependency.delete_hard_dependencies(context, source_id,
+                                                         target_id)
+                Notifier.notify(context, action_name, source)
+                return
+
+        message = _("There is not Hard dependency between the artifact"
+                    " source with id:%(source_id)s to artifact target with"
+                    " id:%(target_id)s ") % {"source_id": source_id,
+                                             "target_id": target_id}
+
+        raise exception.BadRequest(message)

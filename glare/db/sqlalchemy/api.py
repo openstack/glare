@@ -47,7 +47,6 @@ CONF = cfg.CONF
 CONF.import_group("profiler", "glare.common.wsgi")
 options.set_defaults(CONF)
 
-
 BASE_ARTIFACT_PROPERTIES = ('id', 'visibility', 'created_at', 'updated_at',
                             'activated_at', 'owner', 'status', 'description',
                             'name', 'type_name', 'version')
@@ -397,6 +396,7 @@ def _apply_query_base_filters(query, context):
             models.Artifact.visibility == 'public')
 
     return query
+
 
 op_mappings = {
     'eq': operator.eq,
@@ -750,3 +750,245 @@ def delete_blob_data(context, uri, session):
         blob_data_id = uri[6:]
         session.query(
             models.ArtifactBlobData).filter_by(id=blob_data_id).delete()
+
+
+@retry(retry_on_exception=_retry_on_deadlock, wait_fixed=500,
+       stop_max_attempt_number=50)
+def get_hard_dependencies(context, artifact_id, session):
+    """Get all artifact's hard dependencies
+    E.G. for graph: art1->art2->art3, the H.D artifacts of art1 are:
+    art1 and art2
+    :param artifact_id: uuid - the artifact id
+    :return: List of dictionaries (that represent artifacts)
+    """
+
+    condition = models.ArtifactDependencies.artifact_origin == artifact_id
+    query = session.query(models.ArtifactDependencies).filter(condition)
+    # get list of sqlAlchemy ArtifactDependecies objects
+    dependencies = query.all()
+
+    edges = set()  # The hard dependencies
+    nodes = set()  # The hard dependencies' target artifacts
+
+    for dependency in dependencies:
+        d = dependency.to_dict()
+
+        # Take all the different targets
+        target = d["artifact_target"]
+        nodes.add(target)
+
+        # Take all the different (source, target) combinations
+        source = d["artifact_source"]
+        edges.add((source, target))
+
+    # TODO(Idan) extract basic values of the artifact, from artifact it
+    # artifact include all the nodes that the origin artifact depend on
+    artifacts = [{"id": art_id, "values": art_id} for art_id in nodes if
+                 art_id != artifact_id]  # todo: the value section
+
+    dependencies = [{"source": edge[0], "target": edge[1]}
+                    for edge in edges]
+
+    response = {"graph": {"artifacts": artifacts,
+                          "dependencies": dependencies}}
+    return response
+
+
+@retry(retry_on_exception=_retry_on_deadlock, wait_fixed=500,
+       stop_max_attempt_number=50)
+def get_hard_dependencies_children(context, artifact_id, session):
+    """get all the dependencies children of artifact_id
+    E.G. for graph: art1->art2->art3 , the children for art3 are art2 and art1
+    This suggest that we must not delete art3 artifact.
+    :param artifact_id: uuid - the artifact id.
+    :param session: DB session.
+    :return: List of dictionaries (that represent artifacts)
+    """
+
+    condition = models.ArtifactDependencies.artifact_target == artifact_id
+    query = session.query(models.ArtifactDependencies).filter(condition)
+    # get list of sqlAlchemy ArtifactDependecies objects
+    dependencies = query.all()
+
+    edges = set()  # The hard dependencies
+    nodes = set()  # The hard dependencies' target artifacts
+
+    for dependency in dependencies:
+        d = dependency.to_dict()
+
+        # Take all the different targets
+        origin = d["artifact_origin"]
+        nodes.add(origin)
+
+        # Take all the different (source, target) combinations
+        target = artifact_id
+        source = d["artifact_source"]
+        edges.add((source, target))
+        if origin != source:
+            edges.add((source, origin))
+
+    # TODO(Idan) extract basic values of the artifact, from artifact it
+    # artifacts include all the nodes that dependes on the artifact_id
+    artifacts = [{"id": art_id, "values":  get(context, art_id, session)}
+                 for art_id in nodes if art_id != artifact_id]
+
+    dependencies = [{"source": edge[0], "target": edge[1]}
+                    for edge in edges]
+
+    response = {"graph":
+                {"artifacts": artifacts, "dependencies": dependencies}}
+    return response
+
+    # return [d.to_dict() for d in dependencies]
+
+
+@retry(retry_on_exception=_retry_on_deadlock, wait_fixed=500,
+       stop_max_attempt_number=50)
+def set_hard_dependencies(context, source, target, session):
+    """Set hard dependency from one artifact (source) to another (target)
+    Might set more dependencies if nessecary - in case other art dependens
+    on the source.
+    :param source: uuid - the artifact id of the source.
+    :param target: uuid - the artifact id of the target.
+    :param session: DB session.
+    """
+    with session.begin():
+
+        # check if this H.D is already exists -(should we check it on engine?)
+        constraint1 = models.ArtifactDependencies.artifact_source == source
+        constraint2 = models.ArtifactDependencies.artifact_origin == source
+        constraint3 = models.ArtifactDependencies.artifact_target == target
+        existed_h_d_con = and_(constraint1, constraint2, constraint3)
+        q = session.query(models.ArtifactDependencies).filter(existed_h_d_con)
+        if len(q.all()) > 0:
+            return
+
+        dependency = models.ArtifactDependencies()
+
+        # create or update the basic, set basic
+        dependency.artifact_origin = source
+        dependency.artifact_source = source
+        dependency.artifact_target = target
+        session.add(dependency)
+
+        # note - we check that no cycles are created in engine.py
+
+        condition1 = models.ArtifactDependencies.artifact_target == source
+        query = session.query(models.ArtifactDependencies).filter(condition1)
+
+        # return list of object, that each represent a row
+        dependencies = query.all()
+
+        # Create additional rows
+        for d in dependencies:
+            dependency = models.ArtifactDependencies()
+            dependency.artifact_origin = d.artifact_origin
+            dependency.artifact_source = source
+            dependency.artifact_target = target
+            # merge - add only if we don't have this dependency
+            session.merge(dependency)
+
+        # When connecting solitary source to target_node that has many H.D
+        condition2 = models.ArtifactDependencies.artifact_origin == target
+        query = session.query(models.ArtifactDependencies).filter(condition2)
+        dependencies = query.all()
+        # Create additional rows
+        for query_row in dependencies:
+            dependency = models.ArtifactDependencies()
+            dependency.artifact_origin = source  # original src
+            dependency.artifact_source = query_row.artifact_source
+            dependency.artifact_target = query_row.artifact_target
+            session.merge(dependency)
+
+            # for cases in which the order of H.D setting is like:
+            #  3->5, 1->2, 2->3
+            recursive_set(context, query_row, session)
+
+        session.flush()
+
+
+@retry(retry_on_exception=_retry_on_deadlock, wait_fixed=500,
+       stop_max_attempt_number=50)
+def recursive_set(context, query_row, session):
+    cond = models.ArtifactDependencies.artifact_target ==\
+        query_row.artifact_origin
+    query = session.query(models.ArtifactDependencies).filter(cond)
+    dependencies = query.all()
+    for query_row2 in dependencies:
+        dependency = models.ArtifactDependencies()
+        dependency.artifact_origin = query_row2.artifact_origin
+        dependency.artifact_source = query_row.artifact_source
+        dependency.artifact_target = query_row.artifact_target
+        session.merge(dependency)
+
+
+@retry(retry_on_exception=_retry_on_deadlock, wait_fixed=500,
+       stop_max_attempt_number=50)
+def delete_hard_dependencies(context, art_source_id, art_target_id, session):
+    """Delete Hard dependency (H.D) from source to target artifact.
+    In case that there is H.D between some art to source, the H.D
+    Between art to target_id will be removed.
+    If there isn't H.D between source to target, bad request exception
+    will be raised.
+    :param art_source_id: uuid - the artifact id of the source.
+    :param art_target_id: uuid - the artifact id of the target.
+    :param session: DB session.
+    """
+
+    with session.begin():
+        # to get the specific source-target record
+
+        cond1 = models.ArtifactDependencies.artifact_source == art_source_id
+        cond2 = models.ArtifactDependencies.artifact_target == art_target_id
+        cond = and_(cond1, cond2)
+
+        # delete the row #
+        orig_query = session.query(models.ArtifactDependencies).filter(cond)
+        rows_to_del_set = set()
+
+        # Recursive #
+        # get all the rows that are no longer relevant due to the H.D deletion
+        for row in orig_query:
+            rows_to_del_set = \
+                recursive_delete_hard_dependencies(context, session,
+                                                   art_source_id,
+                                                   row.artifact_target,
+                                                   rows_to_del_set)
+        orig_query.delete()
+
+        # todo - optimize
+        # for Queries in rows_to_del_set:
+        #     row.delete()
+
+
+@retry(retry_on_exception=_retry_on_deadlock, wait_fixed=500,
+       stop_max_attempt_number=50)
+def recursive_delete_hard_dependencies(context, session, art_origin_id,
+                                       art_target_id, rows_to_del_set):
+    """helper function to 'delete_hard_dependencies' """
+    cond = and_(
+        models.ArtifactDependencies.artifact_source == art_target_id,
+        models.ArtifactDependencies.artifact_origin == art_origin_id)
+
+    rows_to_del = session.query(models.ArtifactDependencies).filter(cond)
+    # rows_to_del_set.add(rows_to_del)
+    for row in rows_to_del:
+        rows_to_del_set = recursive_delete_hard_dependencies(
+            context, session, row.artifact_origin,
+            row.artifact_target, rows_to_del_set)
+    rows_to_del.delete()  # Todo - optimize
+    return rows_to_del_set
+
+
+@retry(retry_on_exception=_retry_on_deadlock, wait_fixed=500,
+       stop_max_attempt_number=50)
+def delete_hard_dependencies_for_art_deletion(context, art_to_be_deleted_id,
+                                              session):
+    """When artifact is deleted we should update hard dependencies table
+     by removing all the rows with this artifact as the origin
+     """
+
+    with session.begin():
+        cond = models.ArtifactDependencies.artifact_origin == \
+            art_to_be_deleted_id
+        session.query(models.ArtifactDependencies).filter(cond).delete()
