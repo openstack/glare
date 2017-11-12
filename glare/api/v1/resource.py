@@ -80,6 +80,11 @@ QUOTA_INPUT_SCHEMA = {
     },
     "type": "array"
 }
+# Todo: HARD_DEPENDENCY_SCHEMA
+# validate input format using jsonschema
+HARD_DEPENDENCY_SCHEMA = {
+
+}
 
 
 class RequestDeserializer(api_versioning.VersionedResource,
@@ -254,6 +259,12 @@ class RequestDeserializer(api_versioning.VersionedResource,
         return {'values': values}
 
     # TODO(mfedosin) add pagination to list of quotas
+
+    @supported_versions(min_ver='1.1')
+    def set_hard_dependencies(self, req):
+        self._get_content_type(req, expected=['application/json'])
+        body = self._get_request_body(req)
+        return body
 
 
 def log_request_progress(f):
@@ -484,6 +495,30 @@ class ArtifactsController(api_versioning.VersionedResource):
         """
         return self.engine.list_project_quotas(req.context, project_id)
 
+    @supported_versions(min_ver='1.1')
+    @log_request_progress
+    def get_hard_dependencies(self, req, artifact_id):
+        return self.engine.get_hard_dependencies(
+            req.context, artifact_id)
+
+    @supported_versions(min_ver='1.1')
+    @log_request_progress
+    def get_hard_dependencies_children(self, req, artifact_id):
+        return self.engine.get_hard_dependencies_children(
+            req.context, artifact_id)
+
+    @supported_versions(min_ver='1.1')
+    @log_request_progress
+    def set_hard_dependencies(self, req, source_id, target_id):
+        self.engine.set_hard_dependencies(
+            req.context, source_id, target_id)
+
+    @supported_versions(min_ver='1.1')
+    @log_request_progress
+    def delete_hard_dependencies(self, req, source_id, target_id):
+        self.engine.delete_hard_dependencies(
+            req.context, source_id, target_id)
+
 
 class ResponseSerializer(api_versioning.VersionedResource,
                          wsgi.JSONResponseSerializer):
@@ -618,6 +653,22 @@ class ResponseSerializer(api_versioning.VersionedResource,
     def list_project_quotas(self, response, quotas):
         quotas = self._serialize_quota(quotas)
         self._prepare_json_response(response, quotas)
+
+    @supported_versions(min_ver='1.1')
+    def get_hard_dependencies(self, response, dependencies):
+        self._prepare_json_response(response, dependencies)
+
+    @supported_versions(min_ver='1.1')
+    def get_hard_dependencies_children(self, response, dependencies):
+        self._prepare_json_response(response, dependencies)
+
+    @supported_versions(min_ver='1.1')
+    def set_hard_dependencies(self, response, result):
+        response.status_int = http_client.NO_CONTENT
+
+    @supported_versions(min_ver='1.1')
+    def delete_hard_dependencies(self, response, result):
+        response.status_int = http_client.NO_CONTENT
 
 
 def create_resource():

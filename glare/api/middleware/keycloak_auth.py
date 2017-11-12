@@ -122,7 +122,7 @@ class KeycloakAuthMiddleware(base_middleware.Middleware):
                 raise exception.Unauthorized(message=resp.text)
             if resp.status_code == 403:
                 raise exception.Forbidden(message=resp.text)
-            elif resp.status_code >= 400:
+            elif resp.status_code > 400:
                 raise exception.GlareException(message=resp.text)
 
             if self.mcclient:
