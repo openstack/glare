@@ -20,17 +20,17 @@ from sqlalchemy import BigInteger
 from sqlalchemy import Boolean
 from sqlalchemy import Column
 from sqlalchemy import DateTime
-from sqlalchemy.ext import declarative
 from sqlalchemy import ForeignKey
 from sqlalchemy import Index
 from sqlalchemy import Integer
 from sqlalchemy import LargeBinary
 from sqlalchemy import Numeric
+from sqlalchemy import String
+from sqlalchemy import Text
+from sqlalchemy.ext import declarative
 from sqlalchemy.orm import backref
 from sqlalchemy.orm import composite
 from sqlalchemy.orm import relationship
-from sqlalchemy import String
-from sqlalchemy import Text
 
 from glare.common import semver_db
 
@@ -265,17 +265,35 @@ class ArtifactQuota(BASE, ArtifactBase):
                          nullable=False)
 
 
+class ArtifactDependencies(BASE, ArtifactBase):
+    __tablename__ = 'glare_hard_dependencies'
+    __table_args__ = (Index('ix_artifact_dependencies_source_id',
+                            'artifact_source'),
+                      Index('ix_artifact_dependencies_origin_id',
+                            'artifact_origin'),
+                      Index('ix_artifact_dependencies_target_id',
+                            'artifact_target'),
+                      {'mysql_engine': 'InnoDB', 'mysql_charset': 'utf8'})
+
+    artifact_origin = Column(String(36), ForeignKey('glare_artifacts.id'),
+                             primary_key=True)
+    artifact_source = Column(String(36), ForeignKey('glare_artifacts.id'),
+                             primary_key=True)
+    artifact_target = Column(String(36), ForeignKey('glare_artifacts.id'),
+                             primary_key=True)
+
+
 def register_models(engine):
     """Create database tables for all models with the given engine."""
     models = (Artifact, ArtifactTag, ArtifactProperty, ArtifactBlob,
-              ArtifactLock, ArtifactQuota)
+              ArtifactLock, ArtifactQuota, ArtifactDependencies)
     for model in models:
         model.metadata.create_all(engine)
 
 
 def unregister_models(engine):
     """Drop database tables for all models with the given engine."""
-    models = (ArtifactQuota, ArtifactLock, ArtifactBlob, ArtifactProperty,
-              ArtifactTag, Artifact)
+    models = (ArtifactDependencies, ArtifactQuota, ArtifactLock, ArtifactBlob,
+              ArtifactProperty, ArtifactTag, Artifact)
     for model in models:
         model.metadata.drop_all(engine)
