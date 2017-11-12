@@ -265,17 +265,35 @@ class ArtifactQuota(BASE, ArtifactBase):
                          nullable=False)
 
 
+class ArtifactDependencies(BASE, ArtifactBase):
+    __tablename__ = 'glare_hard_dependencies'
+    __table_args__ = (Index('ix_artifact_dependencies_source_id',
+                            'artifact_source'),
+                      Index('ix_artifact_dependencies_origin_id',
+                            'artifact_origin'),
+                      Index('ix_artifact_dependencies_target_id',
+                            'artifact_target'),
+                      {'mysql_engine': 'InnoDB', 'mysql_charset': 'utf8'})
+
+    artifact_origin = Column(String(36), ForeignKey('glare_artifacts.id'),
+                             primary_key=True)
+    artifact_source = Column(String(36), ForeignKey('glare_artifacts.id'),
+                             primary_key=True)
+    artifact_target = Column(String(36), ForeignKey('glare_artifacts.id'),
+                             primary_key=True)
+
+
 def register_models(engine):
     """Create database tables for all models with the given engine."""
     models = (Artifact, ArtifactTag, ArtifactProperty, ArtifactBlob,
-              ArtifactLock, ArtifactQuota)
+              ArtifactLock, ArtifactQuota, ArtifactDependencies)
     for model in models:
         model.metadata.create_all(engine)
 
 
 def unregister_models(engine):
     """Drop database tables for all models with the given engine."""
-    models = (ArtifactQuota, ArtifactLock, ArtifactBlob, ArtifactProperty,
-              ArtifactTag, Artifact)
+    models = (ArtifactDependencies, ArtifactQuota, ArtifactLock, ArtifactBlob,
+              ArtifactProperty, ArtifactTag, Artifact)
     for model in models:
         model.metadata.drop_all(engine)

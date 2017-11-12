@@ -76,7 +76,8 @@ class TestArtifact(functional.FunctionalTest):
     def _url(self, path):
         if path.startswith('/schemas') or \
                 path.startswith('/quotas') or \
-                path.startswith('/project-quotas'):
+                path.startswith('/project-quotas') or \
+                path.startswith('/dependencies'):
             return 'http://127.0.0.1:%d%s' % (self.glare_port, path)
         else:
             return 'http://127.0.0.1:%d/artifacts%s' % (self.glare_port, path)
