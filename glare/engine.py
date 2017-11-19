@@ -16,23 +16,25 @@
 from copy import deepcopy
 
 import jsonpatch
+import six.moves.urllib.parse as urlparse
+from eventlet import tpool
 from oslo_config import cfg
 from oslo_log import log as logging
 from oslo_utils import excutils
 from oslo_utils import timeutils
 from oslo_utils import uuidutils
-import six.moves.urllib.parse as urlparse
 
+from glare import hard_dependency
+from glare import locking
+from glare import quota
 from glare.common import exception
 from glare.common import policy
 from glare.common import store_api
 from glare.common import utils
 from glare.db import artifact_api
 from glare.i18n import _
-from glare import locking
 from glare.notification import Notifier
 from glare.objects.meta import registry
-from glare import quota
 
 CONF = cfg.CONF
 LOG = logging.getLogger(__name__)
@@ -369,6 +371,10 @@ class Engine(object):
         af = self._show_artifact(context, type_name, artifact_id)
         action_name = 'artifact:delete'
         policy.authorize(action_name, af.to_dict(), context)
+        # Check that artifact id
+        if not hard_dependency.get_hard_dependencies_children(artifact_id):
+            raise exception.Forbidden
+        hard_dependency.delete_hard_dependencies_for_art_deletion(artifact_id)
         af.pre_delete_hook(context, af)
         blobs = af.delete(context, af)
 
@@ -574,10 +580,11 @@ class Engine(object):
                 if hasattr(af, 'validate_upload'):
                     LOG.warning("Method 'validate_upload' was deprecated. "
                                 "Please use 'pre_upload_hook' instead.")
-                    fd, path = af.validate_upload(context, af, field_name, fd)
+                    fd, path = tpool.execute(
+                        af.validate_upload, context, af, field_name, fd)
                 else:
-                    fd = af.pre_upload_hook(
-                        context, af, field_name, blob_key, fd)
+                    fd = tpool.execute(af.pre_upload_hook,
+                                       context, af, field_name, blob_key, fd)
             except exception.GlareException:
                 raise
             except Exception as e:
@@ -740,3 +747,73 @@ class Engine(object):
         qs = self.config_quotas.copy()
         qs.update(quota.list_quotas(project_id)[project_id])
         return {project_id: qs}
+
+    def get_hard_dependencies(self, context, artifact_id):
+        """
+        Get all artifact_id's hard dependencies
+        :param context: user request context
+        :param artifact_id: source artifact id
+        :return: python dic with all the artifacts that artifact_id depends on
+        """
+        # Check that the owner request the api
+        self._show_artifact(context, 'all', artifact_id, read_only=True)
+
+        return hard_dependency.get_hard_dependencies(artifact_id)
+
+    def set_hard_dependencies(self, context, source_id, target_id):
+        """Set hard dependency between the artifact with
+        source_id to the artifact with the target_id
+        :param context: user request context
+        :param source_id: source artifact id
+        :param target_id: target artifact id
+        """
+        source = self._show_artifact(context, 'all', source_id, read_only=True)
+        target = self._show_artifact(context, 'all', target_id, read_only=True)
+
+        action_name = "artifact:set_hard_dependencies"
+        policy.authorize(action_name, source.to_dict(), context)
+
+        # Check that both source and target arts atr from the same tenant
+        if source.owner != target.owner:
+            msg = _("You cannot set hard dependency two artifacts with"
+                    " different owners:owner of the source artifact:%s\nowner"
+                    " of the target artifact %s") % \
+                  source.owner, target.owner
+            raise exception.BadRequest(msg)
+
+        hard_dependency.set_hard_dependencies(source_id, target_id)
+        Notifier.notify(context, action_name, source)
+
+    def delete_hard_dependencies(self, context, source_id, target_id):
+
+        """Delete hard dependencies between source art to the target art
+        :param context: user request context
+        :param source_id: source artifact id
+        :param target_id: target artifact id
+        """
+
+        # Check that the owner request the api
+        source = self._show_artifact(context, 'all', source_id, read_only=True)
+        target = self._show_artifact(context, 'all', target_id, read_only=True)
+
+        action_name = "artifact:delete_hard_dependencies"
+        policy.authorize(action_name, source.to_dict(), context)
+
+        # Check that we have this hard dependency
+        src_dep_list = hard_dependency.get_hard_dependencies(source_id)
+        valid = False
+        for art in src_dep_list:
+            if art["artifact_source"] == source_id and\
+                            art["artifact_target"] == target_id:
+                valid = True
+                break
+        if not valid:
+            message = _("There is not Hard dependency between the artifact"
+                        " source with id:%(source_id)s to artifact target with"
+                        " id:%(target_id)s ")%\
+                      {"source_id": source_id,"target_id":target_id}
+
+            raise exception.BadRequest(message)
+
+        hard_dependency.delete_hard_dependencies(source_id, target_id)
+        Notifier.notify(context, action_name, source)

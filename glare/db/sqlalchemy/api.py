@@ -16,22 +16,22 @@ import hashlib
 import operator
 import threading
 
+import osprofiler.sqlalchemy
+import six
+import sqlalchemy
+import sqlalchemy.exc
+import sqlalchemy.orm as orm
 from oslo_config import cfg
 from oslo_db import exception as db_exception
 from oslo_db import options
 from oslo_db.sqlalchemy import session
 from oslo_log import log as os_logging
 from oslo_utils import timeutils
-import osprofiler.sqlalchemy
 from retrying import retry
-import six
-import sqlalchemy
 from sqlalchemy import and_
-import sqlalchemy.exc
 from sqlalchemy import exists
 from sqlalchemy import func
 from sqlalchemy import or_
-import sqlalchemy.orm as orm
 from sqlalchemy.orm import aliased
 from sqlalchemy.orm import joinedload
 
@@ -729,3 +729,78 @@ def delete_blob_data(context, uri, session):
         blob_data_id = uri[6:]
         session.query(
             models.ArtifactBlobData).filter_by(id=blob_data_id).delete()
+
+
+@retry(retry_on_exception=_retry_on_deadlock, wait_fixed=500,
+       stop_max_attempt_number=50)
+def get_hard_dependencies(artifact_id, session):
+    """# todo"""
+    condition = models.ArtifactDependencies.artifact_origin == artifact_id
+    query = session.query(models.ArtifactDependencies).filter(condition)
+    # get list of sqlAlchemy ArtifactDependecies objects
+    dependencies = query.all()
+    return [d.to_dict() for d in dependencies]
+
+
+@retry(retry_on_exception=_retry_on_deadlock, wait_fixed=500,
+       stop_max_attempt_number=50)
+def get_hard_dependencies_children(artifact_id, session):
+    """get all the dependencies children of artifact_id
+    E.G. for graph: art1->art2->art3 , the children for art3 are art2 and art1.
+    This suggest that we must not delete art3 artifact.
+    """
+    condition = models.ArtifactDependencies.artifact_target == artifact_id
+    query = session.query(models.ArtifactDependencies).filter(condition)
+    # get list of sqlAlchemy ArtifactDependecies objects
+    dependencies = query.all()
+    return [d.to_dict() for d in dependencies]
+
+@retry(retry_on_exception=_retry_on_deadlock, wait_fixed=500,
+       stop_max_attempt_number=50)
+def set_hard_dependencies(source, target, session):
+    """Set hard dependency between target source artifact to target artifact"""
+    with session.begin():
+        dependency = models.ArtifactDependencies()
+
+        # create or update the basic, set basic
+        dependency.artifact_origin = source
+        dependency.artifact_source = source
+        dependency.artifact_target = target
+        session.add(dependency)
+        condition = models.ArtifactDependencies.artifact_target == source
+        query = session.query(models.ArtifactDependencies).filter(condition)
+
+        # return list of object, that each represent a row
+        dependencies = query.all()
+
+        # Create additional rows
+        for d in dependencies:
+            dependency = models.ArtifactDependencies()
+            dependency.artifact_origin = d.artifact_origin
+            dependency.artifact_source = source
+            dependency.artifact_target = target
+            session.add(dependency)
+        # Todo : check for cycles
+
+        session.flush()
+
+
+@retry(retry_on_exception=_retry_on_deadlock, wait_fixed=500,
+       stop_max_attempt_number=50)
+def delete_hard_dependencies(art_source_id, art_target_id, session):
+    # todo: add docstring
+    with session.begin():
+        # get all the arts that depends on art_source_id
+        condition = and_(models.ArtifactDependencies.artifact_source == art_source_id,
+                         models.ArtifactDependencies.artifact_target == art_target_id)
+        session.query(models.ArtifactDependencies).filter(condition).delete()
+
+
+@retry(retry_on_exception=_retry_on_deadlock, wait_fixed=500,
+       stop_max_attempt_number=50)
+def delete_hard_dependencies_for_art_deletion(art_to_be_deleted_id, session):
+    """When artifact is deleted we should update hard dependencies table
+     by removing all the rows with this artifact as the origin"""
+    with session.begin():
+        condition = models.ArtifactDependencies.artifact_origin == art_to_be_deleted_id
+        session.query(models.ArtifactDependencies).filter(condition).delete()
