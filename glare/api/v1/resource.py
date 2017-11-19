@@ -16,19 +16,20 @@
 deserialization of incoming requests."""
 
 import json
+
 import jsonpatch
 import jsonschema
+import six
+import six.moves.urllib.parse as urlparse
 from oslo_config import cfg
 from oslo_log import log as logging
 from oslo_utils import encodeutils
-import six
 from six.moves import http_client
-import six.moves.urllib.parse as urlparse
 
+from glare import engine
 from glare.api.v1 import api_versioning
 from glare.common import exception as exc
 from glare.common import wsgi
-from glare import engine
 from glare.i18n import _
 
 LOG = logging.getLogger(__name__)
@@ -80,8 +81,10 @@ QUOTA_INPUT_SCHEMA = {
     },
     "type": "array"
 }
+# Todo: HARD_DEPENDENCY
+HARD_DEPENDENCY = {
 
-
+}
 class RequestDeserializer(api_versioning.VersionedResource,
                           wsgi.JSONRequestDeserializer):
     """Glare deserializer for incoming webob requests.
@@ -254,6 +257,12 @@ class RequestDeserializer(api_versioning.VersionedResource,
         return {'values': values}
 
     # TODO(mfedosin) add pagination to list of quotas
+
+    @supported_versions(min_ver='1.1')
+    def set_hard_dependencies(self, req):
+        self._get_content_type(req, expected=['application/json'])
+        body = self._get_request_body(req)
+        return body
 
 
 def log_request_progress(f):
@@ -484,6 +493,24 @@ class ArtifactsController(api_versioning.VersionedResource):
         """
         return self.engine.list_project_quotas(req.context, project_id)
 
+    @supported_versions(min_ver='1.1')
+    @log_request_progress
+    def get_hard_dependencies(self, req, artifact_id):
+        return self.engine.get_hard_dependencies(
+            req.context, artifact_id)
+
+    @supported_versions(min_ver='1.1')
+    @log_request_progress
+    def set_hard_dependencies(self, req, source_id, target_id):
+        self.engine.set_hard_dependencies(
+            req.context, source_id, target_id)
+
+    @supported_versions(min_ver='1.1')
+    @log_request_progress
+    def delete_hard_dependencies(self, req, source_id, target_id):
+        self.engine.delete_hard_dependencies(
+            req.context, source_id, target_id)
+
 
 class ResponseSerializer(api_versioning.VersionedResource,
                          wsgi.JSONResponseSerializer):
@@ -619,6 +646,17 @@ class ResponseSerializer(api_versioning.VersionedResource,
         quotas = self._serialize_quota(quotas)
         self._prepare_json_response(response, quotas)
 
+    @supported_versions(min_ver='1.1')
+    def get_hard_dependencies(self, response, dependencies):
+        self._prepare_json_response(response, dependencies)
+
+    @supported_versions(min_ver='1.1')
+    def set_hard_dependencies(self, response, result):
+        response.status_int = http_client.NO_CONTENT
+
+    @supported_versions(min_ver='1.1')
+    def delete_hard_dependencies(self, response, result):
+        response.status_int = http_client.NO_CONTENT
 
 def create_resource():
     """Artifact resource factory method."""
