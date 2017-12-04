@@ -18,6 +18,7 @@ os.environ['EVENTLET_NO_GREENDNS'] = 'yes'
 
 # Import oslo_service first, so that it makes eventlet hub use a monotonic
 # clock to avoid issues with drifts of system time (see LP 1510234 for details)
-import oslo_service  # noqa
 
-import eventlet  # noqa
+import glare.tools
+
+tools = glare.tools
