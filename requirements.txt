@@ -55,3 +55,6 @@ semantic-version>=2.3.1 # BSD
 # timeutils
 iso8601>=0.1.11 # MIT
 monotonic>=0.6 # Apache-2.0
+
+#command-utils
+osc-lib>=1.7.0 # Apache-2.0
