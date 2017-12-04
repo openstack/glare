@@ -1,0 +1,107 @@
+# Copyright 2017 - Nokia Networks
+#
+#    Licensed under the Apache License, Version 2.0 (the "License");
+#    you may not use this file except in compliance with the License.
+#    You may obtain a copy of the License at
+#
+#        http://www.apache.org/licenses/LICENSE-2.0
+#
+#    Unless required by applicable law or agreed to in writing, software
+#    distributed under the License is distributed on an "AS IS" BASIS,
+#    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#    See the License for the specific language governing permissions and
+#    limitations under the License.
+
+import logging
+from optparse import OptionParser
+import os
+
+from osc_lib.command import command
+
+usage = "usage: %prog [options]"
+parser = OptionParser(usage=usage)
+
+parser.add_option("-n", "--name", dest="artifact_name", type="string",
+                  action="store")
+# parser.add_option()
+
+LOG = logging.getLogger(__name__)
+
+
+class Generator(command.Lister):
+    """
+    This class is used to Generates Custom artifact-type. It uses
+    "artifact_type_template.txt" to create artifact type file.
+
+    Input: command line input argument
+        1. name: Name of the artifact type
+        2. dest: Destination folder where user wants to place artifact type.
+
+    Output: Provides response object contains status and path in case of
+    success and status and Message in case of failure.
+
+    """
+    template_file_name = "artifact_type_template.txt"
+
+    def take_action(self, parsed_args):
+        response = {}
+        try:
+            LOG.debug('take_action({0})'.format(parsed_args))
+            params = {'artifact_name': parsed_args.name,
+                      "destination_dir": (
+                          parsed_args.dest + "/" + parsed_args.name +
+                          ".py")}
+            self.generate_artifact(params)
+            response['Status'] = "Successfully Generated Artifact File"
+            response["Path"] = parsed_args.dest
+        except Exception as exception:
+            logging.error("Error during creating artifact template,cause: %s ",
+                          exception)
+            response["Status"] = "Failed to generated Artifact Type file"
+            response["Message"] = exception
+        return (response.keys(), [response.values()])
+
+    def get_parser(self, prog_name):
+        parser = super(Generator, self).get_parser(prog_name)
+        parser.add_argument(
+            '--name', '-n',
+            metavar='<ARTIFACT_NAME>',
+            help='Name of the artifact you want to create',
+        )
+        parser.add_argument(
+            '--dest', '-d',
+            metavar='<DESTINATION>',
+            help='Direcotry where you want to save generated artifact type '
+                 'file',
+            default=os.getcwd()
+        )
+        return parser
+
+    def generate_artifact(self, params):
+        artifact_name = params.get("artifact_name")
+        artifact_class_name = self.create_artifact_class_name(artifact_name)
+        template_content = self.read_template_file()
+        template_content = template_content.format(artifact_class_name,
+                                                   artifact_name)
+        return self.write_template_file(artifact_name, template_content,
+                                        params.get("destination_dir"))
+
+    def create_artifact_class_name(self, artifact_name):
+        artifact_name_array = artifact_name.split("_")
+        artifact_class_name = ""
+        for part in artifact_name_array:
+            artifact_class_name += part.capitalize()
+        return artifact_class_name
+
+    def read_template_file(self):
+        template_path = os.path.join(os.path.dirname(__file__),
+                                     self.template_file_name)
+        template_file = open(template_path, "r")
+        file_content = template_file.read()
+        template_file.close()
+        return file_content
+
+    def write_template_file(self, artifact_name, content, dest):
+        artifact_file = open(dest, "w")
+        artifact_file.write(content)
+        artifact_file.close()
