@@ -21,3 +21,7 @@ os.environ['EVENTLET_NO_GREENDNS'] = 'yes'
 import oslo_service  # noqa
 
 import eventlet  # noqa
+
+import glare.tools
+
+tools = glare.tools
