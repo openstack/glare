@@ -27,7 +27,7 @@ cryptography!=2.0,>=1.9 # BSD/Apache-2.0
 # For paste.util.template used in keystone.common.template
 Paste>=2.0.2 # MIT
 
-jsonpatch>=1.16 # BSD
+jsonpatch!=1.20,>=1.16 # BSD
 jsonschema<3.0.0,>=2.6.0 # MIT
 pyOpenSSL>=16.2.0 # Apache-2.0
 # Required by openstack.common libraries
