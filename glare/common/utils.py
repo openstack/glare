@@ -26,8 +26,10 @@ except ImportError:
 from eventlet.green import socket
 
 import hashlib
+import io
 import os
 import re
+import tempfile
 
 import glance_store
 from OpenSSL import crypto
@@ -81,6 +83,8 @@ def cooperative_read(fd):
 
 
 MAX_COOP_READER_BUFFER_SIZE = 134217728  # 128M seems like a sane buffer limit
+
+INMEMORY_OBJECT_SIZE_LIMIT = 134217728  # 128 megabytes
 
 
 class CooperativeReader(object):
@@ -623,3 +627,32 @@ def get_system_ca_file():
             LOG.debug("Using ca file %s", ca)
             return ca
     LOG.warning("System ca file could not be found.")
+
+
+def create_inmemory_file(fd):
+    flobj = io.BytesIO(fd.read(INMEMORY_OBJECT_SIZE_LIMIT))
+
+    # Raise exception if something left
+    data = fd.read(1)
+    if data:
+        msg = _("The zip you are trying to unpack is too big. "
+                "The system upper limit is %s") % INMEMORY_OBJECT_SIZE_LIMIT
+        raise exception.RequestEntityTooLarge(msg)
+
+    return flobj
+
+
+def create_temporary_file(stream, suffix=''):
+    """Create a temporary local file from a stream.
+
+    :param stream: stream of bytes to be stored in a temporary file
+    :param suffix: (optional) file name suffix
+    """
+    tfd, path = tempfile.mkstemp(suffix=suffix)
+    while True:
+        data = stream.read(64536)
+        if data == b'':  # end of file reached
+            break
+        os.write(tfd, data)
+    tfile = os.fdopen(tfd, "rb")
+    return tfile, path

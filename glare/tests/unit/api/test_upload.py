@@ -19,7 +19,7 @@ from six import BytesIO
 from glare.common import exception as exc
 from glare.common import store_api
 from glare.db import artifact_api
-from glare.tests import sample_artifact
+from glare.tests import hooks_artifact
 from glare.tests.unit import base
 
 
@@ -253,28 +253,33 @@ class TestArtifactUpload(base.BaseTestArtifactAPI):
         self.assertNotIn('blb', artifact['dict_of_blobs'])
 
     def test_upload_with_hook(self):
+        values = {'name': 'ttt', 'version': '1.0'}
+        artifact = self.controller.create(
+            self.req, 'hooks_artifact', values)
         with mock.patch.object(
-                sample_artifact.SampleArtifact, 'pre_upload_hook',
+                hooks_artifact.HookChecker, 'pre_upload_hook',
                 return_value=BytesIO(b'ffff')):
             self.controller.upload_blob(
-                self.req, 'sample_artifact', self.sample_artifact['id'],
+                self.req, 'hooks_artifact', artifact['id'],
                 'blob', BytesIO(b'aaa'), 'application/octet-stream')
-            artifact = self.controller.show(self.req, 'sample_artifact',
-                                            self.sample_artifact['id'])
+            artifact = self.controller.show(self.req, 'hooks_artifact',
+                                            artifact['id'])
             self.assertEqual(4, artifact['blob']['size'])
             self.assertEqual('active', artifact['blob']['status'])
 
     def test_upload_with_hook_error(self):
+        values = {'name': 'ttt', 'version': '1.0'}
+        artifact = self.controller.create(
+            self.req, 'hooks_artifact', values)
         with mock.patch.object(
-                sample_artifact.SampleArtifact, 'pre_upload_hook',
+                hooks_artifact.HookChecker, 'pre_upload_hook',
                 side_effect=Exception):
             self.assertRaises(
                 exc.BadRequest, self.controller.upload_blob,
-                self.req, 'sample_artifact', self.sample_artifact['id'],
-                'dict_of_blobs/blb', BytesIO(b'aaa'),
-                'application/octet-stream')
+                self.req, 'sample_artifact', artifact['id'],
+                'dblob', BytesIO(b'aaa'), 'application/octet-stream')
             art = self.controller.show(self.req, 'sample_artifact',
-                                       self.sample_artifact['id'])
+                                       artifact['id'])
             self.assertEqual({}, art['dict_of_blobs'])
 
     def test_upload_nonexistent_field(self):
