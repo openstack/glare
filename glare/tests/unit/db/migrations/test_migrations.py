@@ -247,6 +247,19 @@ class GlareMigrationsCheckers(object):
         self.assert_table(engine, 'glare_quotas', quota_indices,
                           quota_columns)
 
+    def _check_005(self, engine, data):
+        flows_indices = [('ix_glare_flow_status', ['status']),
+                         ('ix_glare_flow_owner', ['owner']),
+                         ('ix_glare_flow_expires_at', ['expires_at'])]
+        flows_columns = ['id',
+                         'blob_url',
+                         'status',
+                         'owner',
+                         'expires_at',
+                         'info']
+        self.assert_table(engine, 'glare_flows', flows_indices,
+                          flows_columns)
+
 
 class TestMigrationsMySQL(GlareMigrationsCheckers,
                           WalkVersionsMixin,
