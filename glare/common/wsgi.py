@@ -33,6 +33,7 @@ from eventlet.green import socket
 from eventlet.green import ssl
 import eventlet.greenio
 import eventlet.wsgi
+from oslo_concurrency import lockutils
 from oslo_concurrency import processutils
 from oslo_config import cfg
 from oslo_log import log as logging
@@ -112,6 +113,7 @@ CONF.register_opts(eventlet_opts)
 profiler_opts.set_defaults(CONF)
 
 ASYNC_EVENTLET_THREAD_POOL_LIST = []
+_CACHED_THREAD_POOL = {}
 
 
 def get_num_workers():
@@ -825,3 +827,33 @@ class Resource(object):
         args.pop("format", None)
 
         return args
+
+
+def memoize(lock_name):
+    def memoizer_wrapper(func):
+        @lockutils.synchronized(lock_name)
+        def memoizer(lock_name):
+            if lock_name not in _CACHED_THREAD_POOL:
+                _CACHED_THREAD_POOL[lock_name] = func()
+
+            return _CACHED_THREAD_POOL[lock_name]
+
+        return memoizer(lock_name)
+
+    return memoizer_wrapper
+
+
+def get_thread_pool(lock_name, size=1024):
+    """Initializes eventlet thread pool.
+    If thread pool is present in cache, then returns it from cache
+    else create new pool, stores it in cache and return newly created
+    pool.
+    @param lock_name:  Name of the lock.
+    @param size: Size of eventlet pool.
+    @return: eventlet pool
+    """
+    @memoize(lock_name)
+    def _get_thread_pool():
+        return get_asynchronous_eventlet_pool(size=size)
+
+    return _get_thread_pool

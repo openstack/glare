@@ -475,6 +475,14 @@ Possible values:
         """
         return getattr(cls.fields[field_name], 'max_folder_size')
 
+    def get_upload_workflow(cls, field_name):
+        """Get upload workflow type.
+
+        :param field_name: blob or blob dict field name
+        :return: upload workflow type: one of 'direct', 'sync', 'async'
+        """
+        return getattr(cls.fields[field_name], 'upload_workflow', 'sync')
+
     @classmethod
     def update_blob(cls, context, af_id, field_name, values):
         """Update blob info in database.

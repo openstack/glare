@@ -15,7 +15,6 @@
 
 from copy import deepcopy
 
-from eventlet import tpool
 import jsonpatch
 from oslo_config import cfg
 from oslo_log import log as logging
@@ -24,10 +23,12 @@ from oslo_utils import timeutils
 from oslo_utils import uuidutils
 import six.moves.urllib.parse as urlparse
 
+from glare.async import taskflow_executor
 from glare.common import exception
 from glare.common import policy
 from glare.common import store_api
 from glare.common import utils
+from glare.common import wsgi
 from glare.db import artifact_api
 from glare.i18n import _
 from glare import locking
@@ -567,47 +568,67 @@ class Engine(object):
                   "Start blob uploading to backend.",
                   {'artifact': af.id, 'blob_name': blob_name})
 
-        # Step 2. Call pre_upload_hook and upload data to the store
-        try:
+        # Step 2. Call pre_upload_hook
+        upload_workflow = af.get_upload_workflow(field_name)
+
+        default_store = getattr(
+            CONF, 'artifact_type:' + af.get_type_name()).default_store
+        # use global parameter if default store isn't set per artifact type
+        if default_store is None:
+            default_store = CONF.glance_store.default_store
+
+        # Now we have to choose between 3 possible upload workflow types
+        if upload_workflow == 'direct':
+            # do nothing
+            pass
+        elif upload_workflow == 'sync':
+            # upload data to temporary inmemory file and run upload hook
+            fd = utils.create_inmemory_file(fd)
             try:
-                # call upload hook first
-                if hasattr(af, 'validate_upload'):
-                    LOG.warning("Method 'validate_upload' was deprecated. "
-                                "Please use 'pre_upload_hook' instead.")
-                    fd, path = tpool.execute(
-                        af.validate_upload, context, af, field_name, fd)
-                else:
-                    fd = tpool.execute(af.pre_upload_hook,
-                                       context, af, field_name, blob_key, fd)
+                fd = af.pre_upload_hook(context, af, field_name, blob_key, fd)
             except exception.GlareException:
-                raise
+                # if upload failed remove blob from db and storage
+                with excutils.save_and_reraise_exception(logger=LOG):
+                    self._save_blob_info(
+                        context, af, field_name, blob_key, None)
             except Exception as e:
+                self._save_blob_info(
+                    context, af, field_name, blob_key, None)
                 raise exception.BadRequest(message=str(e))
+        elif upload_workflow == 'async':
+            # run asynchronous upload hook and get taskflow object
+            executor = taskflow_executor.FlowExecutor(
+                context, af, field_name, blob_key, fd, blob_info, blob_id,
+                default_store)
+            pool = wsgi.get_thread_pool("flows_eventlet_pool")
+            pool.spawn_n(executor.run)
+            return executor.flow_id
 
-            default_store = getattr(
-                CONF, 'artifact_type:' + type_name).default_store
-            # use global parameter if default store isn't set per artifact type
-            if default_store is None:
-                default_store = CONF.glance_store.default_store
-
+        # Step 3. Upload data to the store
+        try:
             location_uri, size, checksums = store_api.save_blob_to_store(
                 blob_id, fd, context, blob_info['size'],
                 store_type=default_store)
-            blob_info.update({'url': location_uri,
-                              'status': 'active',
-                              'size': size})
-            blob_info.update(checksums)
-        except Exception:
+        except exception.GlareException:
             # if upload failed remove blob from db and storage
             with excutils.save_and_reraise_exception(logger=LOG):
                 self._save_blob_info(
                     context, af, field_name, blob_key, None)
+        except Exception as e:
+            self._save_blob_info(
+                context, af, field_name, blob_key, None)
+            raise exception.BadRequest(message=str(e))
+
+        blob_info.update({'url': location_uri,
+                          'status': 'active',
+                          'size': size})
+        blob_info.update(checksums)
 
         LOG.info("Successfully finished blob uploading for artifact "
                  "%(artifact)s blob field %(blob)s.",
                  {'artifact': af.id, 'blob': blob_name})
 
-        # Step 3. Change blob status to 'active'
+        # Step 4. Update blob info and activate it
         with self.lock_engine.acquire(context, lock_key):
             af = af.show(context, artifact_id)
             af = self._save_blob_info(
