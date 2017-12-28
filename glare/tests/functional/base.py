@@ -119,6 +119,8 @@ class TestArtifact(functional.FunctionalTest):
         if ("application/json" in response.headers["content-type"] or
                 "application/schema+json" in response.headers["content-type"]):
             return jsonutils.loads(response.text)
+        if "location" in response.headers:
+            return response.headers["location"]
         return response.text
 
     def post(self, url, data=None, status=201, headers=None):
