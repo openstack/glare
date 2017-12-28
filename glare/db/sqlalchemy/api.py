@@ -750,3 +750,60 @@ def delete_blob_data(context, uri, session):
         blob_data_id = uri[6:]
         session.query(
             models.ArtifactBlobData).filter_by(id=blob_data_id).delete()
+
+
+@retry(retry_on_exception=_retry_on_deadlock, wait_fixed=500,
+       stop_max_attempt_number=50)
+def create_flow(flow_id, blob_url, status, owner, expires_at, session):
+    """Create new flow instance in database."""
+    with session.begin():
+        flow = models.ArtifactFlow()
+        flow.id = flow_id
+        flow.blob_url = blob_url
+        flow.status = status
+        flow.owner = owner
+        flow.expires_at = expires_at
+        flow.save(session=session)
+        return flow.to_dict()
+
+
+@retry(retry_on_exception=_retry_on_deadlock, wait_fixed=500,
+       stop_max_attempt_number=50)
+def update_flow(flow_id, session, status=None, info=None):
+    """Update flow instance database."""
+    try:
+        flow = session.query(
+            models.ArtifactFlow).filter(
+            models.ArtifactFlow.id == flow_id).one()
+        if status is not None:
+            flow.status = status
+        if info is not None:
+            flow.info = info
+        flow.save(session=session)
+    except orm.exc.NoResultFound:
+        msg = _("Cannot find a flow with id %s.") % flow_id
+        raise exception.NotFound(msg)
+    return flow.to_dict()
+
+
+@retry(retry_on_exception=_retry_on_deadlock, wait_fixed=500,
+       stop_max_attempt_number=50)
+def get_flow(context, flow_id, session):
+    """Get flow info from database."""
+    query = session.query(
+        models.ArtifactFlow).filter(models.ArtifactFlow.id == flow_id)
+    if not context.is_admin:
+        query = query.filter(models.ArtifactFlow.owner == context.tenant)
+    return query.one().to_dict()
+
+
+@retry(retry_on_exception=_retry_on_deadlock, wait_fixed=500,
+       stop_max_attempt_number=50)
+def delete_flow(context, flow_id, session):
+    """Delete flow instance from database."""
+    with session.begin():
+        query = session.query(
+            models.ArtifactFlow).filter(models.ArtifactFlow.id == flow_id)
+        if not context.is_admin:
+            query = query.filter(models.ArtifactFlow.owner == context.tenant)
+        query.delete()
