@@ -265,17 +265,35 @@ class ArtifactQuota(BASE, ArtifactBase):
                          nullable=False)
 
 
+class ArtifactFlow(BASE, ArtifactBase):
+    __tablename__ = 'glare_flows'
+    __table_args__ = (
+        Index('ix_glare_flow_status', 'status'),
+        Index('ix_glare_flow_owner', 'owner'),
+        Index('ix_glare_flow_expires_at', 'expires_at'),
+        {'mysql_engine': 'InnoDB', 'mysql_charset': 'utf8'}
+    )
+    id = Column(String(36), primary_key=True,
+                default=lambda: uuidutils.generate_uuid())
+    blob_url = Column(String(2600), nullable=False)
+    status = Column(String(32), nullable=False)
+    owner = Column(String(255), nullable=False)
+    expires_at = Column(DateTime, default=lambda: timeutils.utcnow(),
+                        nullable=False)
+    info = Column(Text())
+
+
 def register_models(engine):
     """Create database tables for all models with the given engine."""
     models = (Artifact, ArtifactTag, ArtifactProperty, ArtifactBlob,
-              ArtifactLock, ArtifactQuota)
+              ArtifactLock, ArtifactQuota, ArtifactFlow)
     for model in models:
         model.metadata.create_all(engine)
 
 
 def unregister_models(engine):
     """Drop database tables for all models with the given engine."""
-    models = (ArtifactQuota, ArtifactLock, ArtifactBlob, ArtifactProperty,
-              ArtifactTag, Artifact)
+    models = (ArtifactFlow, ArtifactQuota, ArtifactLock, ArtifactBlob,
+              ArtifactProperty, ArtifactTag, Artifact)
     for model in models:
         model.metadata.drop_all(engine)
