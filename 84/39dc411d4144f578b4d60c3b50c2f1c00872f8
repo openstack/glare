@@ -1,0 +1,8 @@
+Code-Review+2: Kushal Agrawal <agrawalkushal90@gmail.com>
+Workflow+1: Kushal Agrawal <agrawalkushal90@gmail.com>
+Verified+2: Zuul
+Submitted-by: Zuul
+Submitted-at: Sat, 30 Dec 2017 11:45:28 +0000
+Reviewed-on: https://review.openstack.org/530340
+Project: openstack/glare
+Branch: refs/heads/master
