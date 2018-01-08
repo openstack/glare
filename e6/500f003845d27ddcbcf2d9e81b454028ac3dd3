@@ -1,0 +1,10 @@
+Code-Review+2: Mike Fedosin <mfedosin@redhat.com>
+Workflow+1: Kushal Agrawal <agrawalkushal90@gmail.com>
+Code-Review+2: Idan Narotzki <idan.narotzki@nokia.com>
+Code-Review+2: Kushal Agrawal <agrawalkushal90@gmail.com>
+Verified+2: Zuul
+Submitted-by: Zuul
+Submitted-at: Mon, 08 Jan 2018 10:49:15 +0000
+Reviewed-on: https://review.openstack.org/525233
+Project: openstack/glare
+Branch: refs/heads/master
