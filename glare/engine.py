@@ -329,7 +329,9 @@ class Engine(object):
          versions should be returned in output
         :return: list of artifact definitions
         """
-        policy.authorize("artifact:list", {}, context)
+        if not policy.authorize("artifact:list:all_tenants",
+                                {}, context, do_raise=False):
+            policy.authorize("artifact:list", {}, context)
         artifact_type = registry.ArtifactRegistry.get_artifact_type(type_name)
         # return list to the user
         af_list = [af.to_dict()

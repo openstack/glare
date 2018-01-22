@@ -53,6 +53,8 @@ artifact_policy_rules = [
                        "Policy to get artifact definition"),
     policy.RuleDefault("artifact:list", "",
                        "Policy to list artifacts"),
+    policy.RuleDefault("artifact:list:all_tenants", "",
+                       "Policy to list artifacts from all tenants"),
     policy.RuleDefault("artifact:delete_public",
                        "'public':%(visibility)s and rule:context_is_admin "
                        "or not 'public':%(visibility)s",
