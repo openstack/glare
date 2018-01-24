@@ -1,0 +1,10 @@
+Code-Review+1: Idan Narotzki <idan.narotzki@nokia.com>
+Code-Review+1: lijing <lijing@awcloud.com>
+Code-Review+2: Mike Fedosin <mfedosin@redhat.com>
+Workflow+1: Mike Fedosin <mfedosin@redhat.com>
+Verified+2: Zuul
+Submitted-by: Zuul
+Submitted-at: Wed, 24 Jan 2018 12:06:22 +0000
+Reviewed-on: https://review.openstack.org/534738
+Project: openstack/glare
+Branch: refs/heads/master
