@@ -247,6 +247,9 @@ class GlareMigrationsCheckers(object):
         self.assert_table(engine, 'glare_quotas', quota_indices,
                           quota_columns)
 
+    def _check_005(self, engine, data):
+        pass
+
 
 class TestMigrationsMySQL(GlareMigrationsCheckers,
                           WalkVersionsMixin,
