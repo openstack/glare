@@ -672,9 +672,9 @@ class Engine(object):
 
         return data, meta
 
-    def delete_external_blob(self, context, type_name, artifact_id,
-                             field_name, blob_key=None):
-        """Delete artifact blob with external location.
+    def delete_blob(self, context, type_name, artifact_id, field_name,
+                    blob_key=None):
+        """Delete artifact blob or folder.
 
         :param context: user context
         :param type_name: name of artifact type
@@ -683,24 +683,46 @@ class Engine(object):
         :param blob_key: if field_name is blob dict it specifies key
          in this dictionary
         """
-        af = self._show_artifact(context, type_name, artifact_id)
-        action_name = 'artifact:delete_blob'
-        policy.authorize(action_name, af.to_dict(), context)
+        lock_key = "%s:%s" % (type_name, artifact_id)
+        # TODO(mfedosin): think about situations when the lock may expire
+        with self.lock_engine.acquire(context, lock_key):
+            af = self._show_artifact(context, type_name, artifact_id)
+            action_name = 'artifact:delete_blob'
+            policy.authorize(action_name, af.to_dict(), context)
 
-        blob_name = self._generate_blob_name(field_name, blob_key)
+            if not (af.is_blob(field_name) or af.is_blob_dict(field_name)):
+                msg = _("'%s' is neither a blob nor folder") % field_name
+                raise exception.BadRequest(msg)
 
-        blob = self._get_blob_info(af, field_name, blob_key)
-        if blob is None:
-            msg = _("Blob %s wasn't found for artifact") % blob_name
-            raise exception.NotFound(message=msg)
-        if not blob['external']:
-            msg = _("Blob %s is not external") % blob_name
-            raise exception.Forbidden(message=msg)
+            if af.status != 'drafted':
+                msg = _("Couldn't delete blob from artifact not in drafted "
+                        "status")
+                raise exception.Forbidden(message=msg)
 
-        af = self._save_blob_info(context, af, field_name, blob_key, None)
+            blob = getattr(af, field_name)
 
-        Notifier.notify(context, action_name, af)
-        return af.to_dict()
+            if blob_key is not None:
+                # Delete just one blob from a folder
+                blob = {blob_key: blob[blob_key]} if blob_key in blob else None
+
+            if blob is None:
+                return af.to_dict()
+
+            if af.is_blob(field_name) and blob['status'] != 'active':
+                msg = _("Couldn't delete blob not in active status")
+                raise exception.Forbidden(message=msg)
+            elif af.is_blob_dict(field_name):
+                for item in getattr(af, field_name).values():
+                    if item['status'] != 'active':
+                        msg = _("Couldn't delete folder with blobs not in "
+                                "active status")
+                        raise exception.Forbidden(message=msg)
+
+            self._delete_blobs(context, af, {field_name: blob})
+            af = self._show_artifact(context, type_name, artifact_id)
+            Notifier.notify(context, action_name, af)
+
+            return af.to_dict()
 
     @staticmethod
     def set_quotas(context, values):

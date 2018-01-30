@@ -441,8 +441,8 @@ class ArtifactsController(api_versioning.VersionedResource):
 
     @supported_versions(min_ver='1.1')
     @log_request_progress
-    def delete_external_blob(self, req, type_name, artifact_id, blob_path):
-        """Delete blob with external location from Glare repo.
+    def delete_blob(self, req, type_name, artifact_id, blob_path):
+        """Delete blob from Glare repo.
 
         :param req: User request
         :param type_name: Artifact type name
@@ -450,7 +450,7 @@ class ArtifactsController(api_versioning.VersionedResource):
         :param blob_path: path to artifact blob
         """
         field_name, blob_key = self._parse_blob_path(blob_path)
-        return self.engine.delete_external_blob(
+        return self.engine.delete_blob(
             req.context, type_name, artifact_id, field_name, blob_key)
 
     @supported_versions(min_ver='1.1')

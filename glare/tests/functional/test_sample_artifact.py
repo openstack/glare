@@ -927,8 +927,8 @@ class TestBlobs(base.TestArtifact):
         art = self.delete(url=url + '/blob', status=200)
         self.assertIsNone(art['blob'])
 
-        # Deletion of empty blob fails
-        self.delete(url=url + '/blob', status=404)
+        # Deletion of empty blob works
+        self.delete(url=url + '/blob', status=200)
 
         # Deletion of non-blob field fails
         self.delete(url=url + '/int1', status=400)
@@ -949,8 +949,9 @@ class TestBlobs(base.TestArtifact):
         self.assertEqual(sha1, art['blob']['sha1'])
         self.assertEqual(sha256, art['blob']['sha256'])
 
-        # Deletion of internal blob fails
-        self.delete(url=url + '/blob', status=403)
+        # Deletion of internal blob works
+        art = self.delete(url=url + '/blob', status=200)
+        self.assertIsNone(art['blob'])
 
     def test_delete_external_blob_dict(self):
         # Create artifact
@@ -993,8 +994,8 @@ class TestBlobs(base.TestArtifact):
         art = self.delete(url=url + '/dict_of_blobs/blob', status=200)
         self.assertNotIn('blob', art['dict_of_blobs'])
 
-        # Deletion of non-existing blob fails
-        self.delete(url=url + '/dict_of_blobs/NONEXIST', status=404)
+        # Deletion of non-existing blob works
+        self.delete(url=url + '/dict_of_blobs/NONEXIST', status=200)
 
         # Upload data
         data = 'some_arbitrary_testing_data'
@@ -1009,8 +1010,9 @@ class TestBlobs(base.TestArtifact):
         self.assertEqual(sha1, art['dict_of_blobs']['blob']['sha1'])
         self.assertEqual(sha256, art['dict_of_blobs']['blob']['sha256'])
 
-        # Deletion of internal blob fails
-        self.delete(url=url + '/dict_of_blobs/blob', status=403)
+        # Deletion of internal blob works
+        art = self.delete(url=url + '/dict_of_blobs/blob', status=200)
+        self.assertNotIn('blob', art['dict_of_blobs'])
 
     def test_internal_location(self):
         self.set_user('admin')

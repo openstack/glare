@@ -15,6 +15,7 @@
 from six import BytesIO
 
 from glare.common import exception as exc
+from glare.db import artifact_api as artifact_db_api
 from glare.tests.unit import base
 
 
@@ -48,7 +49,7 @@ class TestDeleteBlobs(base.BaseTestArtifactAPI):
         self.assertNotIn('id', art['blob'])
 
         # Delete external blob works
-        self.controller.delete_external_blob(
+        self.controller.delete_blob(
             self.req, 'sample_artifact', self.sample_artifact['id'], 'blob')
 
         art = self.controller.show(self.req, 'sample_artifact',
@@ -76,7 +77,7 @@ class TestDeleteBlobs(base.BaseTestArtifactAPI):
         self.assertNotIn('id', art['blob'])
 
         # Delete external blob works
-        self.controller.delete_external_blob(
+        self.controller.delete_blob(
             self.req, 'sample_artifact', self.sample_artifact['id'],
             'dict_of_blobs/blob')
 
@@ -85,6 +86,11 @@ class TestDeleteBlobs(base.BaseTestArtifactAPI):
         self.assertNotIn('blob', art['dict_of_blobs'])
 
     def test_delete_internal_blob(self):
+        # Empty blob
+        self.controller.delete_blob(
+            self.req, 'sample_artifact', self.sample_artifact['id'],
+            'blob')
+
         # Upload data to regular blob
         self.controller.upload_blob(
             self.req, 'sample_artifact', self.sample_artifact['id'], 'blob',
@@ -94,12 +100,20 @@ class TestDeleteBlobs(base.BaseTestArtifactAPI):
         self.assertEqual(3, artifact['blob']['size'])
         self.assertEqual('active', artifact['blob']['status'])
 
-        # Deletion of uploaded internal blobs fails with Forbidden
-        self.assertRaises(
-            exc.Forbidden, self.controller.delete_external_blob,
+        # Deletion of uploaded internal blobs works
+        self.controller.delete_blob(
             self.req, 'sample_artifact', self.sample_artifact['id'], 'blob')
 
+        art = self.controller.show(self.req, 'sample_artifact',
+                                   self.sample_artifact['id'])
+        self.assertIsNone(art['blob'])
+
     def test_delete_internal_blob_dict(self):
+        # No blob in the blob dict
+        self.controller.delete_blob(
+            self.req, 'sample_artifact', self.sample_artifact['id'],
+            'dict_of_blobs/Nonexisting')
+
         # Upload data to the blob dict
         self.controller.upload_blob(
             self.req, 'sample_artifact', self.sample_artifact['id'],
@@ -109,33 +123,120 @@ class TestDeleteBlobs(base.BaseTestArtifactAPI):
         self.assertEqual(3, artifact['dict_of_blobs']['blob']['size'])
         self.assertEqual('active', artifact['dict_of_blobs']['blob']['status'])
 
-        # Deletion of uploaded internal blobs fails with Forbidden
-        self.assertRaises(
-            exc.Forbidden, self.controller.delete_external_blob,
+        # Deletion of uploaded internal blobs works
+        self.controller.delete_blob(
             self.req, 'sample_artifact', self.sample_artifact['id'],
             'dict_of_blobs/blob')
+
+        art = self.controller.show(self.req, 'sample_artifact',
+                                   self.sample_artifact['id'])
+        self.assertNotIn('blob', art['dict_of_blobs'])
 
     def test_delete_blob_wrong(self):
         # Non-blob field
         self.assertRaises(
-            exc.BadRequest, self.controller.delete_external_blob,
+            exc.BadRequest, self.controller.delete_blob,
             self.req, 'sample_artifact', self.sample_artifact['id'],
             'int1')
 
         # Non-existing field
         self.assertRaises(
-            exc.BadRequest, self.controller.delete_external_blob,
+            exc.BadRequest, self.controller.delete_blob,
             self.req, 'sample_artifact', self.sample_artifact['id'],
             'Nonexisting')
 
-        # Empty blob
+    def test_delete_saving_blob(self):
+        # Upload data
+        self.controller.upload_blob(
+            self.req, 'sample_artifact', self.sample_artifact['id'], 'blob',
+            BytesIO(b'a' * 100), 'application/octet-stream')
+        # Check that data was uploaded successfully
+        self.sample_artifact = self.controller.show(
+            self.req, 'sample_artifact', self.sample_artifact['id'])
+        self.assertEqual(100, self.sample_artifact['blob']['size'])
+        self.assertEqual('active', self.sample_artifact['blob']['status'])
+
+        blob = self.sample_artifact['blob']
+        # Change status of the blob to 'saving'
+        blob['status'] = 'saving'
+        artifact_db_api.ArtifactAPI().update_blob(
+            self.req.context, self.sample_artifact['id'], {'blob': blob})
+        self.sample_artifact = self.controller.show(
+            self.req, 'sample_artifact', self.sample_artifact['id'])
+        blob = self.sample_artifact['blob']
+        self.assertEqual(100, blob['size'])
+        self.assertEqual('saving', blob['status'])
+
         self.assertRaises(
-            exc.NotFound, self.controller.delete_external_blob,
+            exc.Forbidden, self.controller.delete_blob,
             self.req, 'sample_artifact', self.sample_artifact['id'],
             'blob')
 
-        # No blob in the blob dict
-        self.assertRaises(
-            exc.NotFound, self.controller.delete_external_blob,
+    def test_delete_saving_blob_from_folder(self):
+        # Upload data to folder
+        self.controller.upload_blob(
             self.req, 'sample_artifact', self.sample_artifact['id'],
-            'dict_of_blobs/Nonexisting')
+            'dict_of_blobs/blob', BytesIO(b'a' * 100),
+            'application/octet-stream')
+        # Check that data was uploaded successfully
+        self.sample_artifact = self.controller.show(
+            self.req, 'sample_artifact', self.sample_artifact['id'])
+        self.assertEqual(
+            100, self.sample_artifact['dict_of_blobs']['blob']['size'])
+        self.assertEqual(
+            'active', self.sample_artifact['dict_of_blobs']['blob']['status'])
+
+        blob = self.sample_artifact['dict_of_blobs']['blob']
+        # Change status of the blob to 'saving'
+        blob['status'] = 'saving'
+        artifact_db_api.ArtifactAPI().update_blob(
+            self.req.context, self.sample_artifact['id'],
+            {'dict_of_blobs': {'blob': blob}})
+        self.sample_artifact = self.controller.show(
+            self.req, 'sample_artifact', self.sample_artifact['id'])
+        blob = self.sample_artifact['dict_of_blobs']['blob']
+        self.assertEqual(100, blob['size'])
+        self.assertEqual('saving', blob['status'])
+
+        self.assertRaises(
+            exc.Forbidden, self.controller.delete_blob,
+            self.req, 'sample_artifact', self.sample_artifact['id'],
+            'dict_of_blobs/blob')
+
+    def test_delete_blob_from_folder_with_saving_blob(self):
+        # Upload data to folder
+        self.controller.upload_blob(
+            self.req, 'sample_artifact', self.sample_artifact['id'],
+            'dict_of_blobs/blob', BytesIO(b'a' * 100),
+            'application/octet-stream')
+        self.controller.upload_blob(
+            self.req, 'sample_artifact', self.sample_artifact['id'],
+            'dict_of_blobs/another_blob', BytesIO(b'a' * 101),
+            'application/octet-stream')
+
+        # Check that data was uploaded successfully
+        self.sample_artifact = self.controller.show(
+            self.req, 'sample_artifact', self.sample_artifact['id'])
+        self.assertEqual(
+            101,
+            self.sample_artifact['dict_of_blobs']['another_blob']['size'])
+        self.assertEqual(
+            'active',
+            self.sample_artifact['dict_of_blobs']['another_blob']['status'])
+
+        blob = self.sample_artifact['dict_of_blobs']['blob']
+        # Change status of the blob to 'saving'
+        blob['status'] = 'saving'
+        artifact_db_api.ArtifactAPI().update_blob(
+            self.req.context, self.sample_artifact['id'],
+            {'dict_of_blobs': {'blob': blob}})
+        self.sample_artifact = self.controller.show(
+            self.req, 'sample_artifact', self.sample_artifact['id'])
+        blob = self.sample_artifact['dict_of_blobs']['blob']
+        self.assertEqual(100, blob['size'])
+        self.assertEqual('saving', blob['status'])
+
+        self.assertRaises(
+            exc.Forbidden, self.controller.delete_blob,
+            self.req, 'sample_artifact', self.sample_artifact['id'],
+            'dict_of_blobs')
