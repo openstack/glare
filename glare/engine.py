@@ -672,8 +672,8 @@ class Engine(object):
 
         return data, meta
 
-    def delete_external_blob(self, context, type_name, artifact_id,
-                             field_name, blob_key=None):
+    def delete_blob(self, context, type_name, artifact_id, field_name,
+                    blob_key=None):
         """Delete artifact blob with external location.
 
         :param context: user context
@@ -687,19 +687,26 @@ class Engine(object):
         action_name = 'artifact:delete_blob'
         policy.authorize(action_name, af.to_dict(), context)
 
-        blob_name = self._generate_blob_name(field_name, blob_key)
+        if not (af.is_blob(field_name) or af.is_blob_dict(field_name)):
+            msg = _("'%s' is neither a blob nor folder") % field_name
+            raise exception.BadRequest(msg)
 
-        blob = self._get_blob_info(af, field_name, blob_key)
-        if blob is None:
-            msg = _("Blob %s wasn't found for artifact") % blob_name
-            raise exception.NotFound(message=msg)
-        if not blob['external']:
-            msg = _("Blob %s is not external") % blob_name
+        if af.status != 'drafted':
+            msg = _("Couldn't delete blob from artifact not in drafted "
+                    "status")
             raise exception.Forbidden(message=msg)
 
-        af = self._save_blob_info(context, af, field_name, blob_key, None)
+        blob = getattr(af, field_name)
 
-        Notifier.notify(context, action_name, af)
+        if blob_key is not None:
+            blob = {blob_key: blob[blob_key]} if blob_key in blob else None
+
+        if blob is not None:
+            self._delete_blobs(context, af, {field_name: blob})
+
+            af = self._show_artifact(context, type_name, artifact_id)
+
+            Notifier.notify(context, action_name, af)
         return af.to_dict()
 
     @staticmethod

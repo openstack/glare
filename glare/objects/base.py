@@ -486,7 +486,8 @@ Possible values:
         :return: updated artifact definition in Glare
         """
         af_upd = cls.db_api.update_blob(context, af_id, {field_name: values})
-        return cls.init_artifact(context, af_upd)
+        res = cls.init_artifact(context, af_upd)
+        return res
 
     # Next comes a collection of hooks for various operations
 

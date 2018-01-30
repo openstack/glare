@@ -94,7 +94,7 @@ class API(wsgi.Router):
                        conditions={'method': ['PUT']})
         mapper.connect('/artifacts/{type_name}/{artifact_id}/{blob_path:.*?}',
                        controller=glare_resource,
-                       action='delete_external_blob',
+                       action='delete_blob',
                        conditions={'method': ['DELETE']})
         mapper.connect('/artifacts/{type_name}/{artifact_id}/{blob_path:.*?}',
                        controller=reject_method_resource,
