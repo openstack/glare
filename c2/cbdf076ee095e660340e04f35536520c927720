@@ -1,0 +1,9 @@
+Code-Review+2: Kushal Agrawal <agrawalkushal90@gmail.com>
+Code-Review+2: Idan Narotzki <idan.narotzki@nokia.com>
+Workflow+1: Idan Narotzki <idan.narotzki@nokia.com>
+Verified+2: Zuul
+Submitted-by: Zuul
+Submitted-at: Thu, 01 Feb 2018 17:34:17 +0000
+Reviewed-on: https://review.openstack.org/537373
+Project: openstack/glare
+Branch: refs/heads/master
