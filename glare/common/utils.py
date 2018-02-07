@@ -35,7 +35,6 @@ from oslo_config import cfg
 from oslo_log import log as logging
 from oslo_utils import encodeutils
 from oslo_utils import excutils
-from oslo_utils import timeutils
 from oslo_utils import uuidutils
 from oslo_versionedobjects import fields
 import requests
@@ -44,6 +43,7 @@ import six
 from glare.common import exception
 from glare.i18n import _
 from glare.objects.meta import fields as glare_fields
+from glare.objects.meta import wrappers
 
 CONF = cfg.CONF
 
@@ -343,32 +343,45 @@ def stash_conf_values():
 
 
 def split_filter_op(expression):
-    """Split operator from threshold in an expression.
-    Designed for use on a comparative-filtering query field.
-    When no operator is found, default to an equality comparison.
 
-    :param expression: the expression to parse
-    :return: a tuple (operator, threshold) parsed from expression
-    """
-    left, sep, right = expression.partition(':')
-    if sep:
-        # If the expression is a date of the format ISO 8601 like
-        # CCYY-MM-DDThh:mm:ss+hh:mm and has no operator, it should
-        # not be partitioned, and a default operator of eq should be
-        # assumed.
-        try:
-            timeutils.parse_isotime(expression)
-            op = 'eq'
-            threshold = expression
-        except ValueError:
-            op = left
-            threshold = right
-    else:
-        op = 'eq'  # default operator
-        threshold = left
+    default_operator = "eq"
+    default_condition_combiner = "and"
+    combiner_options = ('and', 'or')
+    operator_list = wrappers.FILTERS
 
-    # NOTE stevelle decoding escaped values may be needed later
-    return op, threshold
+    # all method return data in requence combiner, Operator, value
+    def one(expression):
+        return default_condition_combiner, default_operator, expression
+
+    def two(expression):
+        args = expression.split(":")
+        if args[0] in combiner_options:     # and:5, and:or, or:lte
+            return args[0], default_operator, args[1]
+        elif args[0] in operator_list:       # eq:14, and:15
+            return default_condition_combiner, args[0], args[1]
+        else:
+            return default_condition_combiner, default_operator, expression
+
+    def multiple(expression):
+        args = expression.split(":")
+        combiner = default_condition_combiner
+        operator = default_operator
+        progress_index = 0
+
+        if args[0] in combiner_options:
+            combiner = args[0]
+            progress_index += 1
+
+        if args[progress_index] in operator_list:
+            operator = args[progress_index]
+            progress_index += 1
+
+        return combiner, operator, ":".join(args[progress_index:])
+
+    switcher = {1: one, 2: two}
+    func = switcher.get(len(expression.split(":")), multiple)
+
+    return func(expression)
 
 
 def validate_quotes(value):

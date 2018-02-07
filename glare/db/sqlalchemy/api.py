@@ -264,10 +264,15 @@ def _apply_user_filters(query, basic_conds, tag_conds, prop_conds):
                 and_(*tag_condition))
 
     if prop_conds:
-        for prop_condition in prop_conds:
+        for prop_condition in prop_conds['and']:
             query = query.join(models.ArtifactProperty, aliased=True).filter(
                 and_(*prop_condition))
-
+        or_queries = []
+        for prop_condition in prop_conds['or']:
+            or_queries.append(and_(*prop_condition))
+        if len(or_queries) != 0:
+            query = query.join(models.ArtifactProperty, aliased=True).filter(
+                or_(*or_queries))
     return query
 
 
@@ -425,8 +430,11 @@ op_mappings = {
 def _do_query_filters(filters):
     basic_conds = []
     tag_conds = []
-    prop_conds = []
-    for field_name, key_name, op, field_type, value in filters:
+    prop_conds = {
+        "and": [],
+        "or": []
+    }
+    for field_name, key_name, op, field_type, value, query_combiner in filters:
         if field_name == 'tags':
             tags = utils.split_filter_value_for_quotes(value)
             for tag in tags:
@@ -474,7 +482,7 @@ def _do_query_filters(filters):
                     conds.extend([fn(getattr(models.ArtifactProperty,
                                              field_type + '_value'), value)])
 
-            prop_conds.append(conds)
+            prop_conds[query_combiner].append(conds)
 
     return basic_conds, tag_conds, prop_conds
 
