@@ -169,6 +169,13 @@ class TestArtifactList(base.BaseTestArtifactAPI):
         self.assertRaises(exc.BadRequest, self.controller.list,
                           self.req, 'sample_artifact', filters)
 
+        # Filter by or operation
+        filters = [('float1', '5.0:or'), ('bool1', 'yes:or')]
+        res = self.controller.list(self.req, 'sample_artifact', filters)
+        self.assertEqual(6, len(res['artifacts']))
+        for i in (0, 1, 2, 3, 4, 6):
+            self.assertIn(arts[i], res['artifacts'])
+
     def test_list_marker_and_limit(self):
         # Create artifacts
         art_list = [

@@ -350,7 +350,25 @@ def split_filter_op(expression):
     :param expression: the expression to parse
     :return: a tuple (operator, threshold) parsed from expression
     """
+    op = 'eq'  # default operator
+    query_combiner = "and"  # Default query combiner
     left, sep, right = expression.partition(':')
+
+    # separates query operator where conditional operator is not provided
+    # but query operator is provided
+    # Example : "5.0:or"
+    if right in ["and", "or"]:
+        query_combiner = right
+        right = None
+        sep = None
+
+    # Separates the Query operator from right portion of the express and
+    # restructure expression to evaluates so ISO Time validation can be done
+    elif right.rfind("and") != -1 or right.rfind("or") != -1:
+        query_combiner = right[right.rindex(":") + 1::]
+        expression = right[0:right.rindex(":")]
+        left, sep, right = expression.partition(':')
+
     if sep:
         # If the expression is a date of the format ISO 8601 like
         # CCYY-MM-DDThh:mm:ss+hh:mm and has no operator, it should
@@ -358,17 +376,15 @@ def split_filter_op(expression):
         # assumed.
         try:
             timeutils.parse_isotime(expression)
-            op = 'eq'
             threshold = expression
         except ValueError:
             op = left
             threshold = right
     else:
-        op = 'eq'  # default operator
         threshold = left
 
     # NOTE stevelle decoding escaped values may be needed later
-    return op, threshold
+    return op, threshold, query_combiner
 
 
 def validate_quotes(value):

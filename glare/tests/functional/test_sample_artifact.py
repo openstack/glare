@@ -651,6 +651,42 @@ class TestList(base.TestArtifact):
         self.assertEqual(art1, result['artifacts'][0])
         self.assertEqual(response_url, result['first'])
 
+    def test_list_artifact_with_filter_query_combiner(self):
+        # Create artifact
+        art_list = [self.create_artifact({'name': 'name%s' % i,
+                                          'version': '2.0',
+                                          'tags': ['tag%s' % i],
+                                          'int1': 1024,
+                                          'float1': 123.456,
+                                          'str1': 'bugaga',
+                                          'bool1': True})
+                    for i in range(5)]
+
+        public_art = self.create_artifact({'name': 'name5',
+                                           'version': '2.0',
+                                           'tags': ['tag4', 'tag5'],
+                                           'int1': 2048,
+                                           'float1': 987.654,
+                                           'str1': 'lalala',
+                                           'bool1': False,
+                                           'string_required': '123'})
+        url = '/sample_artifact/%s' % public_art['id']
+        data = [{
+            "op": "replace",
+            "path": "/status",
+            "value": "active"
+        }]
+
+        self.patch(url=url, data=data, status=200)
+        public_art = self.admin_action(public_art['id'], self.make_public)
+
+        art_list.append(public_art)
+
+        url = '/sample_artifact?float1=lte:123.456:and&str1=eq:lalal:or&' \
+              'str1=eq:bugaga:or'
+        result = sort_results(self.get(url=url)['artifacts'])
+        self.assertEqual(art_list[:5], result)
+
 
 class TestBlobs(base.TestArtifact):
     def test_blob_dicts(self):
