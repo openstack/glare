@@ -51,8 +51,13 @@ artifact_policy_rules = [
                        "Policy to publish artifact"),
     policy.RuleDefault("artifact:get", "",
                        "Policy to get artifact definition"),
+    policy.RuleDefault("artifact:get_any_artifact", "role:specific_admin_role",
+                       "Policy to get artifact from any realm"),
     policy.RuleDefault("artifact:list", "",
                        "Policy to list artifacts"),
+    policy.RuleDefault("artifact:list_all_artifacts",
+                       "role:specific_admin_role",
+                       "Policy to list artifacts from all realms"),
     policy.RuleDefault("artifact:delete_public",
                        "'public':%(visibility)s and rule:context_is_admin "
                        "or not 'public':%(visibility)s",
@@ -80,6 +85,10 @@ artifact_policy_rules = [
                        "rule:admin_or_owner and "
                        "rule:artifact:download_deactivated",
                        "Policy to download blob from artifact"),
+    policy.RuleDefault("artifact:download_from_any_artifact",
+                       "specific_admin_role",
+                       "Policy to download blob from any artifact in any realm"
+                       ),
     policy.RuleDefault("artifact:delete_blob", "rule:admin_or_owner",
                        "Policy to delete blob with external location "
                        "from artifact"),
