@@ -1,0 +1,8 @@
+Code-Review+2: Mike Fedosin <mfedosin@redhat.com>
+Workflow+1: Mike Fedosin <mfedosin@redhat.com>
+Verified+2: Zuul
+Submitted-by: Zuul
+Submitted-at: Thu, 08 Feb 2018 13:16:32 +0000
+Reviewed-on: https://review.openstack.org/541373
+Project: openstack/glare
+Branch: refs/heads/stable/pike
