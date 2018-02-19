@@ -31,9 +31,11 @@ import contextlib
 
 from alembic import script
 import mock
+from oslo_db.sqlalchemy import enginefacade
+from oslo_db.sqlalchemy import test_fixtures
 from oslo_db.sqlalchemy import utils as db_utils
-from oslo_db.tests.sqlalchemy import base as test_base
 from oslo_log import log as logging
+from oslotest import base as test_base
 import sqlalchemy
 import sqlalchemy.exc
 
@@ -122,6 +124,7 @@ class GlareMigrationsCheckers(object):
 
     def setUp(self):
         super(GlareMigrationsCheckers, self).setUp()
+        self.engine = enginefacade.writer.get_engine()
         self.config = migration.get_alembic_config()
         self.migration_api = migration
 
@@ -250,17 +253,20 @@ class GlareMigrationsCheckers(object):
 
 class TestMigrationsMySQL(GlareMigrationsCheckers,
                           WalkVersionsMixin,
-                          test_base.MySQLOpportunisticTestCase):
-    pass
+                          test_fixtures.OpportunisticDBTestMixin,
+                          test_base.BaseTestCase):
+    FIXTURE = test_fixtures.MySQLOpportunisticFixture
 
 
 class TestMigrationsPostgreSQL(GlareMigrationsCheckers,
                                WalkVersionsMixin,
-                               test_base.PostgreSQLOpportunisticTestCase):
-    pass
+                               test_fixtures.OpportunisticDBTestMixin,
+                               test_base.BaseTestCase):
+    FIXTURE = test_fixtures.PostgresqlOpportunisticFixture
 
 
 class TestMigrationsSqlite(GlareMigrationsCheckers,
                            WalkVersionsMixin,
-                           test_base.DbTestCase,):
+                           test_fixtures.OpportunisticDBTestMixin,
+                           test_base.BaseTestCase):
     pass
