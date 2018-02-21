@@ -360,13 +360,17 @@ def _do_paginate_query(query, marker=None, limit=None, sort=None):
             if sort[i][0] in BASE_ARTIFACT_PROPERTIES:
                 if sort[i][0] == 'version':
                     value = semver_db.parse(value)
-                crit_attrs.append([sort_dir_func(getattr(models.Artifact,
-                                                         sort[i][0]), value)])
+                if value:
+                    crit_attrs.append([sort_dir_func(getattr(models.Artifact,
+                                                             sort[i][0]),
+                                                     value)])
             else:
                 query = query.join(models.ArtifactProperty, aliased=True)
                 conds = [models.ArtifactProperty.name == sort[i][0]]
-                conds.extend([sort_dir_func(getattr(models.ArtifactProperty,
-                             sort[i][2] + '_value'), value)])
+                if value:
+                    conds.extend([sort_dir_func(getattr(
+                        models.ArtifactProperty, sort[i][2] + '_value'),
+                        value)])
                 crit_attrs.append(conds)
 
             criteria = [and_(*crit_attr) for crit_attr in crit_attrs]

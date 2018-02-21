@@ -497,6 +497,23 @@ class TestList(base.TestArtifact):
         expected = sort_results(sort_results(art_list), target='int1')
         self.assertEqual(expected, result['artifacts'])
 
+        [self.create_artifact({'name': 'name%s' % i,
+                               'version': '1.0',
+                               'tags': ['tag%s' % i],
+                               'int1': 1024,
+                               'float1': 123.456,
+                               'str1': None,
+                               'bool1': True})
+         for i in range(11, 14)]
+
+        # sorted by nullable column
+        url = '/sample_artifact?limit=2'
+        result = self.get(url=url, status=200)
+        next_link = result.get("next")
+        url = next_link[10::] + "&sort=str1"
+        result = self.get(url=url, status=200)
+        self.assertIsNotNone(result)
+
     def test_list_versions(self):
         # Create artifacts with versions
         version_list = ['1.0', '1.1', '2.0.0', '2.0.1-beta', '2.0.1', '20.0']
