@@ -251,9 +251,9 @@ class Engine(object):
                     raise exception.BadRequest(msg)
                 utils.validate_change_allowed(af, field_name)
                 setattr(af, field_name, value)
-            artifact_type.pre_create_hook(context, af)
+            artifact_type.pre_create_hook(context, af, values)
             af = af.create(context)
-            artifact_type.post_create_hook(context, af)
+            artifact_type.post_create_hook(context, af, values)
             # notify about new artifact
             Notifier.notify(context, action_name, af)
             # return artifact to the user

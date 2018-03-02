@@ -75,14 +75,14 @@ class HookChecker(base.BaseArtifact):
         return "hooks_artifact"
 
     @classmethod
-    def pre_create_hook(cls, context, af):
+    def pre_create_hook(cls, context, af, request_body):
         # create a temporary file and set the path to artifact field
         __, af.temp_file_path_create = tempfile.mkstemp(dir=af.temp_dir)
         with open(af.temp_file_path_create, 'w') as f:
             f.write('pre_create_hook was called\n')
 
     @classmethod
-    def post_create_hook(cls, context, af):
+    def post_create_hook(cls, context, af, request_body):
         with open(af.temp_file_path_create, 'a') as f:
             f.write('post_create_hook was called\n')
 

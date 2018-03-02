@@ -500,11 +500,11 @@ Possible values:
     # Next comes a collection of hooks for various operations
 
     @classmethod
-    def pre_create_hook(cls, context, af):
+    def pre_create_hook(cls, context, af, request_body):
         pass
 
     @classmethod
-    def post_create_hook(cls, context, af):
+    def post_create_hook(cls, context, af, request_body):
         pass
 
     @classmethod

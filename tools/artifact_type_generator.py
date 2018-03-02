@@ -112,11 +112,11 @@ class {class_name}(base_artifact.BaseArtifact):
 
     # Here it goes a collection of possible operational hooks:
     @classmethod
-    def pre_create_hook(cls, context, af):
+    def pre_create_hook(cls, context, af, request_body):
         pass
 
     @classmethod
-    def post_create_hook(cls, context, af):
+    def post_create_hook(cls, context, af, request_body):
         pass
 
     @classmethod
