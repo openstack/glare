@@ -30,6 +30,10 @@ class All(base.BaseArtifact):
         'type_name': Field(fields.StringField,
                            description="Name of artifact type.",
                            sortable=True),
+        'display_type_name': Field(fields.StringField,
+                                   description="General usage name of "
+                                               "artifact type.",
+                                   sortable=True),
     }
 
     @classmethod
