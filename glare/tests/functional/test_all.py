@@ -61,6 +61,20 @@ class TestAll(base.TestArtifact):
         self.assertEqual(54, len(res))
         self.assertEqual(sorted(res, key=lambda x: x['type_name']), res)
 
+        # get all artifacts based on display_type_name
+        url = '/all?sort=display_type_name:asc&limit=100'
+        res = self.get(url=url, status=200)['artifacts']
+        self.assertEqual(54, len(res))
+        self.assertEqual(sorted(res, key=lambda x: x['display_type_name']),
+                         res)
+
+        # get Heat Template like only
+        url = '/all?display_type_name=like:Heat%&sort=display_type_name:asc'
+        res = self.get(url=url, status=200)['artifacts']
+        self.assertEqual(18, len(res))
+        for art in res:
+            self.assertEqual('Heat', art['display_type_name'][:4])
+
     def test_all_readonlyness(self):
         self.create_artifact(data={'name': 'all'}, type_name='all', status=403)
         art = self.create_artifact(data={'name': 'image'}, type_name='images')
