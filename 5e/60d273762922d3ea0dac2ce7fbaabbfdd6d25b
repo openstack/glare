@@ -1,0 +1,9 @@
+Code-Review+1: Moshe Elisha <moshe.elisha@nokia.com>
+Code-Review+2: Kushal Agrawal <kushal.agrawal@nokia.com>
+Workflow+1: Kushal Agrawal <kushal.agrawal@nokia.com>
+Verified+2: Zuul
+Submitted-by: Zuul
+Submitted-at: Sun, 15 Apr 2018 17:14:15 +0000
+Reviewed-on: https://review.openstack.org/560071
+Project: openstack/glare
+Branch: refs/heads/master
