@@ -590,6 +590,15 @@ class TestList(base.TestArtifact):
         result = self.get(url=url)['artifacts']
         self.assertEqual(list(reversed(art_list)), result)
 
+    def test_list_artifact_without_properties(self):
+        res = self.create_artifact({'name': 'artifact_without_properties'})
+        url = '/sample_artifact?name=or:eq:'+ res['id']\
+              +'&id=or:eq:'+res['id']
+        res = self.get(url=url, status=200)['artifacts']
+        self.assertEqual(1, len(res))
+        self.assertEqual('artifact_without_properties', res[0]['name'])
+
+
     def test_list_latest_filter(self):
         # Create artifacts with versions
         group1_versions = ['1.0', '20.0', '2.0.0', '2.0.1-beta', '2.0.1']
