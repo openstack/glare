@@ -237,11 +237,13 @@ class Engine(object):
         init_values = {
             'id': uuidutils.generate_uuid(),
             'name': values.pop('name'),
-            'version': version,
             'owner': context.project_id,
             'created_at': timeutils.utcnow(),
             'updated_at': timeutils.utcnow()
         }
+        for k, v in values.items():
+            init_values[k] = v
+
         af = artifact_type.init_artifact(context, init_values)
         # acquire scoped lock and execute artifact create
         with self._create_scoped_lock(context, type_name, af.name,
