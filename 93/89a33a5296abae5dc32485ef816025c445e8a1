@@ -1,0 +1,9 @@
+Code-Review+1: Renat Akhmerov <renat.akhmerov@gmail.com>
+Code-Review+2: Idan Narotzki <idan.narotzki@nokia.com>
+Workflow+1: Kushal Agrawal <kushal.agrawal@nokia.com>
+Verified+2: Zuul
+Submitted-by: Zuul
+Submitted-at: Mon, 04 Jun 2018 06:55:25 +0000
+Reviewed-on: https://review.openstack.org/569761
+Project: openstack/glare
+Branch: refs/heads/master
