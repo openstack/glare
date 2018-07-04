@@ -135,7 +135,10 @@ class SampleArtifact(base_artifact.BaseArtifact):
                                 max_size=3),
         'system_attribute': Field(fields.StringField,
                                   system=True, sortable=True,
-                                  default="default")
+                                  default="default"),
+        'metadata_attribute': Field(fields.StringField, default="default",
+                                    metadata={"metadata1": "value1",
+                                              "metadata2": "blahblahblah"})
     }
 
     @classmethod
@@ -170,3 +173,28 @@ class SampleArtifact(base_artifact.BaseArtifact):
     def format_all(cls, values):
         values['__some_meta_information__'] = values['name'].upper()
         return values
+
+    @classmethod
+    def gen_schemas(cls):
+        """Return json schema representation of the artifact type."""
+        schemas_prop = {}
+        for field_name, field in cls.fields.items():
+            field_schema = cls._schema_field(
+                field, field_name=field_name)
+            if hasattr(field, 'metadata1'):
+                field_schema['metadata1'] = field.metadata1
+            if hasattr(field, 'metadata2'):
+                field_schema['metadata2'] = field.metadata2
+            schemas_prop[field_name] = field_schema
+
+        schemas = {'properties': schemas_prop,
+                   'name': cls.get_type_name(),
+                   'display_name': cls.get_display_type_name(),
+                   'version': cls.VERSION,
+                   'title': 'Artifact type %s of version %s' %
+                            (cls.get_type_name(), cls.VERSION),
+                   'type': 'object',
+                   'required': ['name']
+                   }
+
+        return schemas
