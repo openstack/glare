@@ -1669,7 +1669,10 @@ class TestUpdate(base.TestArtifact):
         self.set_user("admin")
         self.patch(url, self.make_public, 403)
         self.set_user("user1")
-        self.patch(url, upd_mutable, 403)
+        # test that immutable properties cannot be updated
+        self.patch(url, upd_immutable, status=403)
+        updated_af = self.patch(url, upd_mutable)
+        self.assertEqual("another_new_value", updated_af["string_mutable"])
         self.admin_action(private_art['id'], self.make_active)
         # publish artifact
         self.admin_action(private_art['id'], self.make_public)

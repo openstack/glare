@@ -591,7 +591,7 @@ def validate_change_allowed(af, field_name):
     if field_name not in af.fields:
         msg = _("Cannot add new field '%s' to artifact.") % field_name
         raise exception.BadRequest(msg)
-    if af.status not in ('active', 'drafted'):
+    if af.status not in ('active', 'drafted', 'deactivated'):
         msg = _("Forbidden to change fields "
                 "if artifact is not active or drafted.")
         raise exception.Forbidden(message=msg)
@@ -599,7 +599,7 @@ def validate_change_allowed(af, field_name):
         msg = _("Forbidden to specify system field %s. It is not "
                 "available for modifying by users.") % field_name
         raise exception.Forbidden(msg)
-    if af.status == 'active' and not af.fields[field_name].mutable:
+    if af.status in ['active','deactivated'] and not af.fields[field_name].mutable:
         msg = (_("Forbidden to change field '%s' after activation.")
                % field_name)
         raise exception.Forbidden(message=msg)
