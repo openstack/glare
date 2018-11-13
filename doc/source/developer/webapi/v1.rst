@@ -412,13 +412,13 @@ Glare API complies with OpenStack API-WG guidelines:
     pagination_filter_sort.rst>`_
 
   * `Errors
-    <http://specs.openstack.org/openstack/api-wg/guidelines/errors.html>`_
+    <https://specs.openstack.org/openstack/api-wg/guidelines/errors.html>`_
 
 For updating artifact field values, Glare API uses `json-patch
 <http://jsonpatch.com/>`_.
 
 Glare supports microversions to define what API version it should use:
-`API-WG microversion guidelines <http://specs.openstack.org/openstack/
+`API-WG microversion guidelines <https://specs.openstack.org/openstack/
 api-wg/guidelines/microversion_specification.html>`_.
 
 For description of artifact type `json-schema <http://json-schema.org/>`_ is
@@ -1325,9 +1325,9 @@ For this example, we have an artifact type 'example_type' with fields:
 
 References
 ==========
-#. `Filtering and sorting API-WG guideline <http://specs.openstack.org/openstack/api-wg/guidelines/pagination_filter_sort.html>`_
+#. `Filtering and sorting API-WG guideline <https://specs.openstack.org/openstack/api-wg/guidelines/pagination_filter_sort.html>`_
 
-#. `Errors API-WG guideline <http://specs.openstack.org/openstack/api-wg/guidelines/errors.html>`_
+#. `Errors API-WG guideline <https://specs.openstack.org/openstack/api-wg/guidelines/errors.html>`_
 
 #. `json-patch description <http://jsonpatch.com/>`_
 
