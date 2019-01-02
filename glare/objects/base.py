@@ -546,7 +546,7 @@ Possible values:
         pass
 
     @classmethod
-    def pre_update_hook(cls, context, af):
+    def pre_update_hook(cls, context, af, patch=None):
         pass
 
     @classmethod

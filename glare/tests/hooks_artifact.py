@@ -91,7 +91,7 @@ class HookChecker(base.BaseArtifact):
             f.write('post_create_hook was called\n')
 
     @classmethod
-    def pre_update_hook(cls, context, af):
+    def pre_update_hook(cls, context, af, patch=None):
         # create a temporary file and set the path to artifact field
         __, af.temp_file_path_update = tempfile.mkstemp(dir=af.temp_dir)
         with open(af.temp_file_path_update, 'w') as f:
