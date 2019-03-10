@@ -15,7 +15,6 @@
 
 from copy import deepcopy
 
-from eventlet import tpool
 import jsonpatch
 from oslo_config import cfg
 from oslo_log import log as logging
