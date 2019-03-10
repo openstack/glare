@@ -15,7 +15,6 @@
 
 from copy import deepcopy
 
-from eventlet import tpool
 import jsonpatch
 from oslo_config import cfg
 from oslo_log import log as logging
@@ -208,6 +207,9 @@ class Engine(object):
 
                 old_val = getattr(af, field_name)
                 setattr(af, field_name, af_dict[field_name])
+                if operation.operation.get("op") == "move":
+                    source_field = operation.from_path
+                    setattr(af, source_field, af_dict[source_field])
                 new_val = getattr(af, field_name)
                 if new_val == old_val:
                     # No need to save value to db if it's not changed
@@ -568,11 +570,21 @@ class Engine(object):
             policy.authorize(action_name, af.to_dict(), context)
 
             # create an an empty blob instance in db with 'saving' status
-            if self._get_blob_info(af, field_name, blob_key):
-                msg = _("Blob %(blob)s already exists for artifact "
-                        "%(af)s") % {'blob': field_name, 'af': af.id}
+            existing_blob = self._get_blob_info(af, field_name, blob_key)
+            existing_blob_status = existing_blob.get("status")\
+                if existing_blob else None
+            if existing_blob_status == "saving":
+                msg = _("Blob %(blob)s already exists for artifact and it"
+                        "is in %(status)s %(af)s") % {
+                    'blob': field_name, 'af': af.id,
+                    'status': existing_blob_status}
                 raise exception.Conflict(message=msg)
             utils.validate_change_allowed(af, field_name)
+
+            if existing_blob is not None:
+                blob_info = deepcopy(existing_blob)
+                blob_info['status'] = 'saving'
+
             blob_info['size'] = self._calculate_allowed_space(
                 context, af, field_name, content_length, blob_key)
 
@@ -591,11 +603,12 @@ class Engine(object):
                 if hasattr(af, 'validate_upload'):
                     LOG.warning("Method 'validate_upload' was deprecated. "
                                 "Please use 'pre_upload_hook' instead.")
-                    fd, path = tpool.execute(
-                        af.validate_upload, context, af, field_name, fd)
+                    fd, path = af.validate_upload(context, af, field_name, fd)
                 else:
-                    fd = tpool.execute(af.pre_upload_hook,
-                                       context, af, field_name, blob_key, fd)
+                    LOG.debug("Initiating Pre_upload hook")
+                    fd = af.pre_upload_hook(context, af, field_name,
+                                            blob_key, fd)
+                    LOG.debug("Pre_upload hook executed successfully")
             except exception.GlareException:
                 raise
             except Exception as e:
@@ -618,18 +631,33 @@ class Engine(object):
             # if upload failed remove blob from db and storage
             with excutils.save_and_reraise_exception(logger=LOG):
                 LOG.error("Exception occured: %s", Exception)
+                # delete created blob_info in case of blob_data upload fails.
+                if existing_blob is None:
+                    blob_info = None
+                else:
+                    # Update size of blob_data to previous blob and
+                    # Mark existing blob status to active.
+                    blob_info['size'] = existing_blob['size']
+                    blob_info['status'] = 'active'
                 self._save_blob_info(
-                    context, af, field_name, blob_key, None)
+                    context, af, field_name, blob_key, blob_info)
 
         LOG.info("Successfully finished blob uploading for artifact "
                  "%(artifact)s blob field %(blob)s.",
                  {'artifact': af.id, 'blob': blob_name})
 
         # Step 3. Change blob status to 'active'
-        with self.lock_engine.acquire(context, lock_key):
-            af = af.show(context, artifact_id)
-            af = self._save_blob_info(
-                context, af, field_name, blob_key, blob_info)
+        try:
+            with self.lock_engine.acquire(context, lock_key):
+                af = af.show(context, artifact_id)
+                af = self._save_blob_info(
+                    context, af, field_name, blob_key, blob_info)
+        except Exception as e:
+            msg = _("Exception occured while updating blob status to active"
+                    " for artifact Id : [%(artifact_id)s] , %(error_msg)s") %\
+                {"artifact_id": artifact_id, "error_msg": str(e)}
+            LOG.error(msg)
+            raise
 
         af.post_upload_hook(context, af, field_name, blob_key)
 
