@@ -1,0 +1,9 @@
+Code-Review+2: Noa Koffman <noa.koffman@nokia.com>
+Workflow+1: Idan Narotzki <idan.narotzki@nokia.com>
+Code-Review+1: Filippo Inzaghi <zhao.daqing@99cloud.net>
+Verified+2: Zuul
+Submitted-by: Zuul
+Submitted-at: Thu, 14 Mar 2019 12:09:41 +0000
+Reviewed-on: https://review.openstack.org/643257
+Project: openstack/glare
+Branch: refs/heads/stable/queens
