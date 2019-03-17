@@ -1,0 +1,8 @@
+Code-Review+2: Noa Koffman <noa.koffman@nokia.com>
+Workflow+1: Noa Koffman <noa.koffman@nokia.com>
+Verified+2: Zuul
+Submitted-by: Zuul
+Submitted-at: Sun, 17 Mar 2019 17:56:54 +0000
+Reviewed-on: https://review.openstack.org/643737
+Project: openstack/glare
+Branch: refs/heads/stable/queens
