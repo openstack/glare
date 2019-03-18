@@ -653,12 +653,6 @@ class TestList(base.TestArtifact):
         self.assertEqual(art1, result['artifacts'][0])
         self.assertEqual(response_url, result['first'])
 
-    def test_list_response_attributes(self):
-        url = '/sample_artifact'
-        res = self.get(url=url, status=200)
-        self.assertEqual(res['total_count'], 0)
-        self.assertEqual(res['display_type_name'], "Sample Artifact")
-
 
 class TestBlobs(base.TestArtifact):
     def test_blob_dicts(self):
@@ -669,8 +663,7 @@ class TestBlobs(base.TestArtifact):
                     'artifacts': [],
                     'schema': '/schemas/sample_artifact',
                     'type_name': 'sample_artifact',
-                    'total_count': 0,
-                    'display_type_name': 'Sample Artifact'}
+                    'total_count': 0}
         self.assertEqual(expected, response)
 
         # Create a test artifact
@@ -1231,10 +1224,6 @@ class TestArtifactOps(base.TestArtifact):
         self.admin_action(private_art['id'], self.make_public)
         self.create_artifact(data={"name": "test_af",
                                    "string_required": "test_str"})
-
-        # Check we cannot create data with display_type_name.
-        self.create_artifact(data={"display_type_name": "Sample Artifact",
-                                   "name": "Invalid_data"}, status=400)
 
     def test_activate(self):
         # create artifact to update

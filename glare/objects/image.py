@@ -88,7 +88,3 @@ class Image(base.BaseArtifact):
     @classmethod
     def get_type_name(cls):
         return "images"
-
-    @classmethod
-    def get_display_type_name(cls):
-        return "Images"
