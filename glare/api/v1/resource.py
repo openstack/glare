@@ -320,7 +320,7 @@ class ArtifactsController(api_versioning.VersionedResource):
         if not values.get('name'):
             msg = _("Name must be specified at creation.")
             raise exc.BadRequest(msg)
-        for field in ('visibility', 'status', 'display_type_name'):
+        for field in ('visibility', 'status'):
             if field in values:
                 msg = _("%s is not allowed in a request at creation.") % field
                 raise exc.BadRequest(msg)
@@ -385,8 +385,7 @@ class ArtifactsController(api_versioning.VersionedResource):
         artifacts = artifacts_data["artifacts"]
         result = {'artifacts': artifacts,
                   'type_name': type_name,
-                  'total_count': artifacts_data['total_count'],
-                  'display_type_name': artifacts_data['display_type_name']}
+                  'total_count': artifacts_data['total_count']}
         if len(artifacts) != 0 and len(artifacts) == limit:
             result['next_marker'] = artifacts[-1]['id']
         return result
@@ -546,8 +545,7 @@ class ResponseSerializer(api_versioning.VersionedResource,
             'artifacts': af_list['artifacts'],
             'first': '/artifacts/%s' % type_name,
             'schema': '/schemas/%s' % type_name,
-            'total_count': af_list['total_count'],
-            'display_type_name': af_list['display_type_name']
+            'total_count': af_list['total_count']
         }
         if query:
             body['first'] = '%s?%s' % (body['first'], query)

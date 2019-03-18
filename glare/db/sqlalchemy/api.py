@@ -50,8 +50,7 @@ options.set_defaults(CONF)
 
 BASE_ARTIFACT_PROPERTIES = ('id', 'visibility', 'created_at', 'updated_at',
                             'activated_at', 'owner', 'status', 'description',
-                            'name', 'type_name', 'version',
-                            'display_type_name')
+                            'name', 'type_name', 'version')
 
 _FACADE = None
 _LOCK = threading.Lock()
